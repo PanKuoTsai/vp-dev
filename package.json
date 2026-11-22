@@ -4,6 +4,10 @@
   "description": "Configure, inspect, run and debug QBox-based virtual platforms from a JSON platform description.",
   "version": "0.2.2",
   "publisher": "novatek",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PanKuoTsai/vp-dev.git"
+  },
   "license": "UNLICENSED",
   "private": true,
   "engines": { "vscode": "^1.75.0" },

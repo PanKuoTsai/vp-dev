@@ -12,6 +12,7 @@ VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangel
 - **Windows 簽出**：`patches/` 下的檔案一律使用 LF 換行。先前在 `core.autocrlf` 開啟時，修補檔會被轉成 CRLF 而無法套用。
 - **元件目錄**（`catalog/qbox-catalog.json`）：不再含有產生它的那台機器的資料夾路徑；`tools/qbox-catalog` 寫檔時改以 `<qbox>`、`<libdir>`、`<qbox-catalog>`、`~` 表示。
 - 修補 0002 加進 QBox 的 `debug_dap/README.md` 中，VP Studio 檔案的路徑已更正。
+- **打包**：`package.json` 加上 `repository`（GitHub 的 PanKuoTsai/vp-dev）。README 與變更記錄改用相對連結後，沒有它 `npm run package` 會失敗。
 
 ### 變更
 
