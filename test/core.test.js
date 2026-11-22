@@ -100,9 +100,9 @@ test('strings are escaped and templated', () => {
 
 test('schema accepts the debug section and elf entries', () => {
   let Ajv;
-  // Optional: only when ajv 8 is installed. The schemas are draft 2020-12, which is ajv/dist/2020;
-  // an older ajv (ESLint brings ajv 6 into node_modules) does not have it and cannot read them.
-  try { Ajv = require('ajv/dist/2020'); } catch (e) { return; }
+  // Only when ajv is installed (npm install; CI's lint job runs the tests with it). The schemas
+  // are all draft-07, which every ajv reads.
+  try { Ajv = require('ajv'); } catch (e) { return; }
   const ajv = new Ajv({ strict: false });
   const validate = ajv.compile(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'qbox-platform.schema.json'), 'utf8')));
   const d = load();

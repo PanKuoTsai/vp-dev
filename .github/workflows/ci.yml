@@ -44,3 +44,6 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
+      # With the development dependencies installed, the tests also check the
+      # templates and register descriptions against the schemas (ajv).
+      - run: npm test

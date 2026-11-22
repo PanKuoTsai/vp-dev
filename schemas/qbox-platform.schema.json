@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://example.invalid/qbox-platform/0.1/schema.json",
   "title": "QBox platform description",
   "description": "v0.1 draft. Single source of truth for a QBox virtual platform; the Lua configuration is generated from it.",
@@ -32,21 +32,21 @@
       "description": "Lua files run with dofile() before variables are defined. ${TOP} is the directory of the generated config.",
       "type": "array",
       "items": {
-        "$ref": "#/$defs/templateString"
+        "$ref": "#/definitions/templateString"
       }
     },
     "variables": {
       "description": "Named constants, emitted in order. Later entries may reference earlier ones.",
       "type": "array",
       "items": {
-        "$ref": "#/$defs/variable"
+        "$ref": "#/definitions/variable"
       }
     },
     "luaIncludes": {
       "description": "Lua files run with dofile() after variables are defined (for example a bootloader blob that reads the load addresses).",
       "type": "array",
       "items": {
-        "$ref": "#/$defs/templateString"
+        "$ref": "#/definitions/templateString"
       }
     },
     "platform": {
@@ -59,7 +59,7 @@
           "default": "Container"
         },
         "params": {
-          "$ref": "#/$defs/params"
+          "$ref": "#/definitions/params"
         }
       }
     },
@@ -71,7 +71,7 @@
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/module"
+        "$ref": "#/definitions/module"
       }
     },
     "debug": {
@@ -83,7 +83,7 @@
           "description": "ELF files with debug symbols for the target software, for example vmlinux when the kernel is loaded as a raw binary.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/templateString"
+            "$ref": "#/definitions/templateString"
           }
         }
       }
@@ -92,7 +92,7 @@
       "description": "Escape hatch: Lua files appended verbatim after the generated platform table.",
       "type": "array",
       "items": {
-        "$ref": "#/$defs/templateString"
+        "$ref": "#/definitions/templateString"
       }
     },
     "devicetree": {
@@ -162,7 +162,7 @@
       }
     }
   },
-  "$defs": {
+  "definitions": {
     "identifier": {
       "type": "string",
       "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
@@ -201,13 +201,13 @@
           "type": "integer"
         },
         {
-          "$ref": "#/$defs/hex"
+          "$ref": "#/definitions/hex"
         },
         {
-          "$ref": "#/$defs/varRef"
+          "$ref": "#/definitions/varRef"
         },
         {
-          "$ref": "#/$defs/luaExpr"
+          "$ref": "#/definitions/luaExpr"
         }
       ]
     },
@@ -223,19 +223,19 @@
           "type": "string"
         },
         {
-          "$ref": "#/$defs/luaExpr"
+          "$ref": "#/definitions/luaExpr"
         }
       ]
     },
     "value": {
       "anyOf": [
         {
-          "$ref": "#/$defs/scalar"
+          "$ref": "#/definitions/scalar"
         },
         {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/scalar"
+            "$ref": "#/definitions/scalar"
           }
         }
       ]
@@ -247,7 +247,7 @@
         "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
       },
       "additionalProperties": {
-        "$ref": "#/$defs/value"
+        "$ref": "#/definitions/value"
       }
     },
     "variable": {
@@ -259,10 +259,10 @@
       "additionalProperties": false,
       "properties": {
         "name": {
-          "$ref": "#/$defs/identifier"
+          "$ref": "#/definitions/identifier"
         },
         "value": {
-          "$ref": "#/$defs/value"
+          "$ref": "#/definitions/value"
         },
         "global": {
           "description": "Emit as a Lua global instead of a local. Needed when an included Lua file reads it.",
@@ -298,13 +298,13 @@
       "additionalProperties": false,
       "properties": {
         "bind": {
-          "$ref": "#/$defs/bindTarget"
+          "$ref": "#/definitions/bindTarget"
         },
         "address": {
-          "$ref": "#/$defs/integer"
+          "$ref": "#/definitions/integer"
         },
         "size": {
-          "$ref": "#/$defs/integer"
+          "$ref": "#/definitions/integer"
         },
         "priority": {
           "type": "integer",
@@ -316,10 +316,10 @@
         },
         "repeat": {
           "description": "Emit this port N times; {i} in the port name and in bind runs from 0 to N-1.",
-          "$ref": "#/$defs/integer"
+          "$ref": "#/definitions/integer"
         }
       },
-      "dependentRequired": {
+      "dependencies": {
         "address": [
           "size"
         ],
@@ -339,7 +339,7 @@
       "additionalProperties": false,
       "properties": {
         "params": {
-          "$ref": "#/$defs/params"
+          "$ref": "#/definitions/params"
         },
         "ports": {
           "type": "object",
@@ -347,7 +347,7 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_{}]*$"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/port"
+            "$ref": "#/definitions/port"
           }
         }
       }
@@ -397,7 +397,7 @@
         },
         "count": {
           "description": "Replicate this module N times as name_0 .. name_N-1. {i} is the replica index.",
-          "$ref": "#/$defs/integer"
+          "$ref": "#/definitions/integer"
         },
         "perIndex": {
           "description": "Overrides for single replicas, keyed by index. Merged over params and ports.",
@@ -406,20 +406,20 @@
             "pattern": "^[0-9]+$"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/moduleBody"
+            "$ref": "#/definitions/moduleBody"
           }
         },
         "params": {
-          "$ref": "#/$defs/params"
+          "$ref": "#/definitions/params"
         },
         "ports": {
-          "$ref": "#/$defs/moduleBody/properties/ports"
+          "$ref": "#/definitions/moduleBody/properties/ports"
         },
         "entries": {
           "description": "Positional sub-tables, such as the images of a loader.",
           "type": "array",
           "items": {
-            "$ref": "#/$defs/params"
+            "$ref": "#/definitions/params"
           }
         },
         "devicetree": {
@@ -495,14 +495,14 @@
           "description": "Makes this module a subsystem (container) holding these modules; use it with type \"Container\". Inside, a name in a bind or args is looked up in this container first, then in each enclosing one; a dotted name (\"periph.uart_0\") reaches into a nested container. A container has no count and no ports of its own.",
           "type": "object",
           "propertyNames": {
-            "$ref": "#/$defs/identifier"
+            "$ref": "#/definitions/identifier"
           },
           "additionalProperties": {
-            "$ref": "#/$defs/module"
+            "$ref": "#/definitions/module"
           }
         }
       },
-      "dependentRequired": {
+      "dependencies": {
         "perIndex": [
           "count"
         ]

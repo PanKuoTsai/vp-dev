@@ -62,15 +62,13 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
   const lua = core.generate(d);
   assert.strictEqual((lua.match(/dylib_path = "perf"/g) || []).length, 6);
   // The schema accepts the example and the sweep.
-  // Only with ajv 8: the platform schema is draft 2020-12 (ajv/dist/2020), the sweep schema draft-07 (ajv).
-  // The ajv 6 that ESLint installs has no ajv/dist/2020 and cannot read the platform schema.
-  const Ajv = (() => { try { return { draft2020: require('ajv/dist/2020'), draft7: require('ajv') }; } catch (e) { return null; } })();
+  // Only when ajv is installed (npm install); both schemas are draft-07.
+  const Ajv = (() => { try { return require('ajv'); } catch (e) { return null; } })();
   if (Ajv) {
-    const ajv = new Ajv.draft2020({ allErrors: true, strict: false });
+    const ajv = new Ajv({ allErrors: true, strict: false });
     assert.ok(ajv.validate(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'qbox-platform.schema.json'), 'utf8')), d), JSON.stringify(ajv.errors));
     const sw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'cpu-outstanding.perfsweep.json'), 'utf8'));
-    const ajv7 = new Ajv.draft7({ allErrors: true, strict: false });
-    assert.ok(ajv7.validate(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'vp-perfsweep.schema.json'), 'utf8')), sw), JSON.stringify(ajv7.errors));
+    assert.ok(ajv.validate(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'vp-perfsweep.schema.json'), 'utf8')), sw), JSON.stringify(ajv.errors));
   }
 });
 
@@ -246,8 +244,8 @@ test('perf: a system bus (crossbar) in front of two MAUs: relative_addresses, Qo
     'mau0.masters: gpu is not a traffic_gen whose accesses reach mau0 (display, cpu, dma); its settings are not used']);
   // The schema takes relative_addresses only with an address.
   const schema = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'qbox-platform.schema.json'), 'utf8'));
-  assert.strictEqual(schema.$defs.port.properties.relative_addresses.type, 'boolean');
-  assert.deepStrictEqual(schema.$defs.port.dependentRequired.relative_addresses, ['address']);
+  assert.strictEqual(schema.definitions.port.properties.relative_addresses.type, 'boolean');
+  assert.deepStrictEqual(schema.definitions.port.dependencies.relative_addresses, ['address']);
   // Statistics of a crossbar: topology and each channel.
   const stats = { format: 'vp-perf-stats', version: 1, complete: true, simTimeNs: 1000, initiators: [], memories: [], buses: [{
     name: 'platform.sysbus', topology: 'crossbar', requestUtilization: 0.65, responseUtilization: 0.89, waitNs: {}, masters: {},
