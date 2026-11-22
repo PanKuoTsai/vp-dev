@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://vp-studio/qbox-model.schema.json",
+  "$id": "https://novatek.com.tw/vp-studio/schemas/qbox-model.schema.json",
   "title": "VP Studio model description",
   "description": "A peripheral to generate a QBox module from (VP Studio: Generate Model Code).",
   "type": "object",

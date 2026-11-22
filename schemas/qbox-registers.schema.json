@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://vp-studio/qbox-registers.schema.json",
+  "$id": "https://novatek.com.tw/vp-studio/schemas/qbox-registers.schema.json",
   "title": "VP Studio register description",
   "description": "Registers of a module type's bus port, for the Peripheral Registers view (VP Studio: Import IP-XACT… writes these).",
   "type": "object",

@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://example.invalid/qbox-platform/0.1/schema.json",
+  "$id": "https://novatek.com.tw/vp-studio/schemas/qbox-platform.schema.json",
   "title": "QBox platform description",
   "description": "v0.1 draft. Single source of truth for a QBox virtual platform; the Lua configuration is generated from it.",
   "type": "object",

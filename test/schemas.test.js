@@ -18,6 +18,9 @@ test('schemas: all are JSON Schema draft-07, and package.json names each of them
   for (const f of SCHEMAS) {
     const s = read('schemas/' + f);
     assert.strictEqual(s.$schema, DRAFT, f);
+    // One form of name for all: the publisher's domain, then the file's name. A name, not an address:
+    // nothing fetches it, and VS Code finds the schemas through package.json.
+    assert.strictEqual(s.$id, 'https://novatek.com.tw/vp-studio/schemas/' + f, f);
     const found = [];
     (function walk(v, inProperties) {
       if (Array.isArray(v)) v.forEach((x) => walk(x, false));
