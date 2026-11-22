@@ -142,7 +142,7 @@ testAsync('remote: checking and uploading files with the remote shell commands',
 testAsync('remote password login: askpass server, launcher and helper; ssh options and hooks', async () => {
   const askpass = require('../lib/sim/askpass');
   const remote = require('../lib/sim/remote');
-  const { spawnSync, spawn } = require('child_process');
+  const { spawn } = require('child_process');
   assert.strictEqual(askpass.promptKind("me@sim's password: "), 'password');
   assert.strictEqual(askpass.promptKind('Enter passphrase for key /home/me/.ssh/id_ed25519: '), 'password');
   assert.strictEqual(askpass.promptKind('Are you sure you want to continue connecting (yes/no/[fingerprint])? '), 'confirm');

@@ -19,6 +19,9 @@ tools/**
 !tools/askpass/**
 !tools/qbox-catalog/README.md
 .gitignore
+.github/**
+eslint.config.js
+package-lock.json
 .claude/**
 .vscode/**
 theia/**

@@ -93,6 +93,8 @@ test/run.js                  執行全部測試（npm test）；node test/run.js
 test/<主題>.test.js          各主題的測試，可單獨執行：node test/core.test.js
 test/harness.js              test、testAsync（非同步測試排在所有同步測試之後）
 test/helpers.js              多個測試檔共用的範例平台、元件目錄與暫存工作區
+.github/workflows/ci.yml     CI：在 Linux 上以 Node.js 18 與 22 執行 npm test，並執行 npm run lint
+eslint.config.js             ESLint 設定（npm run lint；先 npm install 取得 ESLint）
 CLAUDE.md                    給後續開發（含 Claude Code）的交接說明
 INSTALL.md                   安裝與第一次使用（給新使用者）
 docs/                        功能說明、驗證狀態、除錯、命令列與 CI、設定、專案結構（由 README.md 連結）

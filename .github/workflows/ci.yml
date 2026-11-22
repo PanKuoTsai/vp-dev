@@ -1,0 +1,46 @@
+# Runs on every push to main and on every pull request.
+#
+#   test  npm test on Linux, with the oldest Node.js VP Studio supports and a
+#         current one. The tests need no npm install: VP Studio has no
+#         dependencies.
+#   lint  npm run lint (ESLint, eslint.config.js).
+#
+# This does not start a simulation: that needs a QBox build. examples/ci shows
+# how to boot a platform with vp-run on a runner that has one.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (Node.js ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [18, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # With dtc the device tree comparison test runs; without it, it is skipped.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends device-tree-compiler
+      - run: npm test
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint

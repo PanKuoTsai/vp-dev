@@ -125,6 +125,7 @@ async function cmdPerfRun(arg) {
   } finally {
     const aborted = shared.perfAbort.aborted;
     shared.perfAbort = undefined;
+    // eslint-disable-next-line no-unsafe-finally -- a stopped run ends here, whatever the simulator reported when it was stopped
     if (aborted) { perfStatus('idle', 'Stopped', false); return; }
   }
   if (r.stats) {

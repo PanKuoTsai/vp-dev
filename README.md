@@ -48,6 +48,12 @@ code --install-extension vp-studio-0.2.*.vsix   # vsce 依 package.json 的版�
 5. 暫停與參數檢視：先建置 sim agent（`tools/sim-agent/build.sh <qbox>/build`，QBox 版本變更後要重建）。之後「Start Simulation」會自動加入 agent 並連線，狀態列出現模擬時間；外部啟動的模擬可用 `VP Studio: Connect to Sim Agent…` 連線。協定見 `tools/sim-agent/README.md`。
 6. 目標軟體除錯：執行 `VP Studio: Start Simulation with Target Debug Port`，再執行 `VP Studio: Add Debug Configurations`，`program` 會自動填入平台的符號檔（沒有設定時才需要手動填），然後從除錯面板附加。launch 設定使用 CDT GDB Debug Adapter 擴充套件（`eclipse-cdt.cdt-gdb-vscode`）與 `gdb-multiarch`。細節見[除錯：偵錯主控台與 gdb 終端機](docs/debugging.md)。
 
+## 開發
+
+- `npm test`：執行 `test/` 下的全部測試，不需要先 `npm install`。
+- `npm run lint`：ESLint（設定在 `eslint.config.js`）；先執行一次 `npm install` 取得 ESLint，需要 Node.js 20.19 以上。
+- 推送到 `main` 與每個 pull request 都會由 GitHub Actions 在 Linux 上執行這兩項（`.github/workflows/ci.yml`）。
+
 ## 文件
 
 | 文件 | 內容 |

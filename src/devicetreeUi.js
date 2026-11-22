@@ -66,7 +66,7 @@ async function deviceTreePane(uri, against) {
       files.set(id, { kind: 'dtb', file: e.resolved, label: vscode.workspace.asRelativePath(e.resolved) });
     }
   }
-  let out = null;
+  let out;
   try { out = devicetree.outputPaths(data, uri.fsPath); } catch (e) { out = null; }
   if (out && fs.existsSync(out.dts)) {
     candidates.push({ id: 'output', label: `DTS written last: ${vscode.workspace.asRelativePath(out.dts)}` });

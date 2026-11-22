@@ -10,6 +10,9 @@ tools/*/build/
 models/*/build/
 **/build/
 
+# Development tools (npm install: ESLint)
+node_modules/
+
 # Theia (see also theia/.gitignore)
 theia/node_modules/
 theia/*/dist/

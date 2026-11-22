@@ -15,7 +15,6 @@ S.scopes=S.scopes||{};S.filters=S.filters||{};S.adv=S.adv||{};
 const save=()=>{if(vscode)vscode.setState(S);};
 const narrow=()=>window.matchMedia('(max-width:660px)').matches;
 const panelOf=m=>document.querySelector('.mod-panel[data-panel="'+CSS.escape(m)+'"]');
-const scopeOf=p=>{const s=p.querySelector('.p-scope');return s?s.value:'all';};
 const bodyOf=(p,scope)=>p.querySelector('.p-scope-body[data-scope="'+CSS.escape(scope)+'"]');
 const indexOf=el=>{const b=el.closest('.p-scope-body');return b&&b.dataset.scope!=='all'?b.dataset.scope:null;};
 function setItab(p,tab){const has=p.querySelector('.itab-body[data-tab="'+tab+'"]');if(!has)tab='params';

@@ -46,7 +46,7 @@ function profileSymbolFile() {
 function loadProfileSymbols() {
   const file = profileSymbolFile();
   if (!file) { shared.profileSymbols = undefined; return undefined; }
-  let mtime = 0;
+  let mtime;
   try { mtime = fs.statSync(file).mtimeMs; } catch (e) { return (shared.profileSymbols = { file, error: 'not found' }); }
   if (shared.profileSymbols && shared.profileSymbols.file === file && shared.profileSymbols.mtime === mtime) return shared.profileSymbols;
   try {
@@ -66,7 +66,7 @@ function loadProfileSymbols() {
 async function findKernelOffset(symbols) {
   const kv = profile.kimageVaddrOffset(symbols);
   if (!kv || !shared.agent || !shared.agentMethods.includes('mem.read') || !shared.runningDoc) return 0n;
-  let loaders = [];
+  let loaders;
   try { loaders = images.collect(shared.runningDoc, core.analyze(shared.runningDoc), path.dirname(shared.profileState.uri.fsPath)).loaders; } catch (e) { return 0n; }
   for (const l of loaders) {
     for (const e of l.entries) {
