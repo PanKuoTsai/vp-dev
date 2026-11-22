@@ -12,7 +12,7 @@ test('checkpoint: what a checkpoint of the Ubuntu platform holds', () => {
   const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
   const top = '/plat';
-  const p = ck.plan(doc, { catalog: cat, descs: reg.loadDir(path.join(__dirname, '..', 'catalog', 'registers')).descs, buses: ['router'], topDir: top });
+  const p = ck.plan(doc, { catalog: cat, descs: reg.loadDir(path.join(__dirname, '..', 'registers')).descs, buses: ['router'], topDir: top });
   // RAM through DMI; the background memory has no DMI and is skipped.
   assert.deepStrictEqual(p.memories, [{ name: 'ram_0', address: '0x80000000', size: '0x100000000', bus: 0 }]);
   assert.deepStrictEqual(p.skipped.map((x) => x.instance), ['fallback_0']);
@@ -36,7 +36,7 @@ test('checkpoint: what a checkpoint of the Ubuntu platform holds', () => {
   // A SystemC model the checkpoint knows nothing about is reported.
   const d2 = JSON.parse(JSON.stringify(doc));
   d2.modules.mystery_0 = { type: 'my_model' };
-  assert.deepStrictEqual(ck.plan(d2, { catalog: cat, topDir: top, descs: reg.loadDir(path.join(__dirname, '..', 'catalog', 'registers')).descs, buses: ['router'] }).unsaved, [{ instance: 'mystery_0', type: 'my_model' }]);
+  assert.deepStrictEqual(ck.plan(d2, { catalog: cat, topDir: top, descs: reg.loadDir(path.join(__dirname, '..', 'registers')).descs, buses: ['router'] }).unsaved, [{ instance: 'mystery_0', type: 'my_model' }]);
   // Without register descriptions the PL011 has no way to be saved either.
   assert.deepStrictEqual(ck.plan(doc, { catalog: cat, topDir: top }).unsaved, [{ instance: 'pl011_uart_0', type: 'Pl011' }]);
 });

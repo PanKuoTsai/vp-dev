@@ -8,7 +8,7 @@ const core = require('../lib/platform/core');
 const registers = require('../lib/analysis/registers');
 
 test('registers: the bundled descriptions load and cover the example platform', () => {
-  const { descs, problems } = registers.loadDir(path.join(__dirname, '..', 'catalog', 'registers'));
+  const { descs, problems } = registers.loadDir(path.join(__dirname, '..', 'registers'));
   assert.deepStrictEqual(problems, []);
   assert.deepStrictEqual(descs.map((d) => path.basename(d.file)), ['gicv3-dist.json', 'pl011.json', 'virtio-mmio.json']);
   const pl011 = descs.find((d) => d.port === 'target_socket').registers;

@@ -1,0 +1,4 @@
+# Generated files: GitHub collapses them in diffs and leaves them out of the language statistics.
+catalog/qbox-catalog.json linguist-generated=true
+package-lock.json linguist-generated=true
+theia/package-lock.json linguist-generated=true

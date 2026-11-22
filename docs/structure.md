@@ -70,7 +70,8 @@ lib/webview/                 各面板的 HTML（平台檢視、追蹤、剖析�
   media.js                   讀取 media/ 中的樣式表與頁面腳本，供各頁面內嵌
 media/                       各 webview 頁面的樣式表與頁面腳本：theme.css（共用）、<頁面>.css、<頁面>.js（platform、trace、profile、perf、qbox、cpuregs）；產生頁面時內嵌進帶 nonce 的 <style> 與 <script>
 lib/menu.js                  VP Studio 選單：指令分組與 when 條件（下拉選單、Actions 檢視、狀態列、獨立版選單列共用）
-catalog/registers/           隨附的暫存器描述（PL011、GICv3 distributor、virtio-mmio）
+catalog/qbox-catalog.json    QBox 元件目錄，由 tools/qbox-catalog 從釘選的 QBox 產生，不手動修改（見 catalog/README.md）
+registers/                   隨附的暫存器描述，手寫（PL011、GICv3 distributor、virtio-mmio）
 prebuilt/                    版本庫內唯一的編譯產物：win32/vp-askpass.exe 與它的 SHA256SUMS（說明見 prebuilt/README.md）
 bin/vp-run                   命令列執行與 CI 的入口：找 Node.js（含 VS Code 內建的）執行 vp-run.js
 bin/vp-run.js                命令列執行與 CI：主控台 expect/send、逾時、JUnit 報告
@@ -87,7 +88,7 @@ tools/container/             容器映像：Dockerfile、建置、執行與取�
 qbox.pin.json                這一版測試過的 QBox commit
 schemas/qbox-platform.schema.json   平台描述 schema（0.1；0.2 加入子系統，0.1 檔案不需修改）
 schemas/qbox-model.schema.json      模型描述 schema
-schemas/qbox-registers.schema.json  暫存器描述 schema（catalog/registers/、工作區的 *.registers.json）
+schemas/qbox-registers.schema.json  暫存器描述 schema（registers/、工作區的 *.registers.json）
 examples/ipxact/simple_timer.xml    IP-XACT 匯入範例
 templates/                   Create Example 指令複製到工作區的範本，測試也以它們為輸入
   ubuntu-aarch64.platform.json      Ubuntu AArch64 參考平台（Create Example Platform）

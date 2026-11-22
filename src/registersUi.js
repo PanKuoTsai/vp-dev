@@ -9,7 +9,7 @@ const modulesTree = require('./modulesTree');
 
 /*
  * Peripheral Registers view. Peripherals of the running platform that a
- * register description covers (catalog/registers, wizard models); their
+ * register description covers (registers, wizard models); their
  * registers are read with the agent's mem.read while the simulation is
  * paused (or halted by a debugger), once per pause, when a peripheral is
  * expanded. Registers whose reading changes the device are read only on
@@ -34,7 +34,7 @@ class RegisterTree {
   descriptions() {
     // The workspace's descriptions come first, so they win over the shipped ones for the same type and port.
     const own = registers.loadFiles(shared.workspaceRegisterFiles);
-    const shipped = registers.loadDir(path.join(common.ROOT, 'catalog', 'registers'));
+    const shipped = registers.loadDir(path.join(common.ROOT, 'registers'));
     const descs = own.descs.concat(shipped.descs);
     const problems = own.problems.concat(shipped.problems);
     for (const m of shared.modelSpecs) {

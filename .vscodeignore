@@ -19,6 +19,7 @@ tools/**
 !tools/askpass/**
 !tools/qbox-catalog/README.md
 .gitignore
+.gitattributes
 .github/**
 eslint.config.js
 package-lock.json

@@ -708,7 +708,7 @@ async function run(o, log = (s) => process.stderr.write(`vp-run: ${s}\n`)) {
       result = EXIT.SETUP;
     } else {
       try {
-        const p = checkpoint.plan(doc, { catalog, descs: registers.loadDir(path.join(ROOT, 'catalog', 'registers')).descs, buses, topDir, overrides: options.overrides });
+        const p = checkpoint.plan(doc, { catalog, descs: registers.loadDir(path.join(ROOT, 'registers')).descs, buses, topDir, overrides: options.overrides });
         for (const u of p.unsaved) log(`warning: the state of ${u.instance} (${u.type}) is not saved`);
         const src = pin.qboxSourceOf(exe);
         const m = await checkpoint.save(client, path.resolve(o.saveCheckpoint), p, {
