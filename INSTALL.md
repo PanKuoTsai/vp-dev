@@ -196,7 +196,7 @@ cp usr/lib/debug/boot/vmlinux-$V platforms/ubuntu/fw/Artifacts/
 - 做法：ssh 透過 `SSH_ASKPASS` 向 VP Studio 要密碼（需要 OpenSSH 8.4 以上；Windows 10/11 內建的與 Ubuntu 22.04 以後都符合）。密碼只在 VS Code 的記憶體裡（或你選擇的密碼儲存區），不會寫進檔案、命令列或環境變數。
 - 密碼登入時，第一次連到的主機會自動接受並記住它的主機金鑰（`StrictHostKeyChecking=accept-new`）；主機金鑰變了仍會拒絕連線。
 - 每次 ssh 呼叫都重新驗證，比金鑰登入稍慢。金鑰的 passphrase 與一次性驗證碼每次都會詢問，不會記住。
-- Windows：ssh 執行的是擴充套件裡的 `lib\vp-askpass.exe`。Windows 版 OpenSSH 無法執行路徑含中文等非 ASCII 字元或空白的程式（例如使用者名稱是中文時，會出現 `CreateProcessW failed error:2`），這時 VP Studio 會把它複製到 `C:\ProgramData\VPStudio-<代碼>\`，並以 `icacls` 把該資料夾限定為你的帳號、SYSTEM 與 Administrators；每次使用前核對內容。
+- Windows：ssh 執行的是擴充套件裡的 `prebuilt\win32\vp-askpass.exe`。Windows 版 OpenSSH 無法執行路徑含中文等非 ASCII 字元或空白的程式（例如使用者名稱是中文時，會出現 `CreateProcessW failed error:2`），這時 VP Studio 會把它複製到 `C:\ProgramData\VPStudio-<代碼>\`，並以 `icacls` 把該資料夾限定為你的帳號、SYSTEM 與 Administrators；每次使用前核對內容。
 
 限制：
 - 遠端執行的模擬不能存檔與還原。

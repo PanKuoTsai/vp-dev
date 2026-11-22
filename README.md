@@ -256,7 +256,7 @@ lib/sim/                     啟動與執行：啟動前檢查、sim agent 客�
   diskspace.js               磁碟映像檔（ext2/3/4）的可用空間
   checkpoint.js              存檔與還原：要存的記憶體、暫存器與磁碟，manifest，從存檔啟動的參數
   remote.js                  遠端模擬：ssh 指令、空閒埠、路徑對應、檔案檢查與上傳、終端機參數
-  askpass.js                 遠端密碼登入：SSH_ASKPASS 伺服器與啟動程式（askpass-helper.js 由 ssh 執行，向 VP Studio 要密碼；Windows 用 lib/sim/vp-askpass.exe，原始碼 tools/askpass/）
+  askpass.js                 遠端密碼登入：SSH_ASKPASS 伺服器與啟動程式（askpass-helper.js 由 ssh 執行，向 VP Studio 要密碼；Windows 用 prebuilt/win32/vp-askpass.exe，原始碼 tools/askpass/）
   launch.js                  啟動前的共用步驟：Lua 路徑、sim agent、snapshot、啟動前檢查、device tree、建置位置
 lib/analysis/                觀測與分析：交易追蹤、剖析、函式追蹤、周邊暫存器、效能實驗
   elfsym.js                  ELF64 函式符號表（vmlinux 等）與位址查詢
@@ -293,6 +293,7 @@ lib/webview/                 各面板的 HTML（平台檢視、追蹤、剖析�
   webtheme.js                各 webview 共用的外觀：顏色、按鈕、輸入欄、表格、圖示
 lib/menu.js                  VP Studio 選單：指令分組與 when 條件（下拉選單、Actions 檢視、狀態列、獨立版選單列共用）
 catalog/registers/           隨附的暫存器描述（PL011、GICv3 distributor、virtio-mmio）
+prebuilt/                    版本庫內唯一的編譯產物：win32/vp-askpass.exe 與它的 SHA256SUMS（說明見 prebuilt/README.md）
 bin/vp-run                   命令列執行與 CI 的入口：找 Node.js（含 VS Code 內建的）執行 vp-run.js
 bin/vp-run.js                命令列執行與 CI：主控台 expect/send、逾時、JUnit 報告
 tools/vp-py/vpstudio.py      sim agent 的 Python 用戶端（只用標準函式庫）

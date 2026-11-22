@@ -13,7 +13,7 @@
  * other VP_ASKPASS_* variables come from ssh's environment, which the child
  * inherits. Only Win32 API, no C runtime start-up code needed beyond mingw's.
  *
- * Build: tools/askpass/build.sh (mingw-w64), output lib/sim/vp-askpass.exe.
+ * Build: tools/askpass/build.sh (mingw-w64), output prebuilt/win32/vp-askpass.exe.
  */
 #include <windows.h>
 

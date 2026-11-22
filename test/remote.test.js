@@ -198,9 +198,12 @@ testAsync('remote password login: askpass server, launcher and helper; ssh optio
     (e) => askpass.offersPassword(e.sshStderr) && /set "vpStudio.remote.auth" to "password"/.test(e.message));
   fs.rmSync(dir, { recursive: true, force: true });
   // On Windows the launcher is vp-askpass.exe (OpenSSH for Windows runs only .exe as SSH_ASKPASS):
-  // shipped next to askpass.js, a 64-bit Windows program built from tools/askpass/vp-askpass.c.
+  // shipped in prebuilt/win32, a 64-bit Windows program built from tools/askpass/vp-askpass.c.
   const exe = askpass.writeLauncher(path.join(os.tmpdir(), 'unused'), 'win32');
-  assert.strictEqual(exe, path.join(__dirname, '..', 'lib', 'sim', 'vp-askpass.exe'));
+  assert.strictEqual(exe, path.join(__dirname, '..', 'prebuilt', 'win32', 'vp-askpass.exe'));
+  // The committed program is the one prebuilt/SHA256SUMS names (tools/askpass/build.sh writes both).
+  const sums = fs.readFileSync(path.join(__dirname, '..', 'prebuilt', 'SHA256SUMS'), 'utf8');
+  assert.ok(sums.includes(`${require('crypto').createHash('sha256').update(fs.readFileSync(exe)).digest('hex')}  win32/vp-askpass.exe`));
   const pe = fs.readFileSync(exe);
   assert.strictEqual(pe.toString('latin1', 0, 2), 'MZ');
   const peAt = pe.readUInt32LE(0x3c);
@@ -242,7 +245,7 @@ testAsync('remote password login: askpass server, launcher and helper; ssh optio
   // An ASCII path is used where it is; icacls failing (another user's folder) stops it.
   assert.strictEqual(askpass.windowsLauncher({ exe: 'C:\\Users\\me\\lib\\vp-askpass.exe', run: () => { throw new Error('not called'); } }), 'C:\\Users\\me\\lib\\vp-askpass.exe');
   assert.throws(() => askpass.windowsLauncher({ exe: orig, env: {}, fsx, run: (cmd) => { if (cmd === 'icacls') throw new Error('Access is denied.'); return `"x","${sid}"`; } }), /Access is denied/);
-  assert.ok(!/^(lib\/\*\*|\*\.exe|lib\/vp-askpass\.exe)$/m.test(fs.readFileSync(path.join(__dirname, '..', '.vscodeignore'), 'utf8')));
+  assert.ok(!/^(prebuilt(\/\*\*)?|prebuilt\/win32(\/\*\*)?|\*\.exe|prebuilt\/win32\/vp-askpass\.exe)$/m.test(fs.readFileSync(path.join(__dirname, '..', '.vscodeignore'), 'utf8')));
 });
 
 testAsync('remote: the simulator is found when a QBox or build folder was given for it', async () => {
