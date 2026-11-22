@@ -1,0 +1,9 @@
+{
+  "name": "theia-check",
+  "publisher": "vpstudio-test",
+  "version": "0.0.1",
+  "description": "Test only: drives VP Studio inside the Theia application and writes what it finds (not shipped).",
+  "engines": { "vscode": "^1.75.0" },
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js"
+}

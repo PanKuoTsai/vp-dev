@@ -1,0 +1,190 @@
+{
+  "$schema": "../../schemas/qbox-platform.schema.json",
+  "schemaVersion": "0.2",
+  "name": "mau-sysbus",
+  "description": "Masters on a system bus (a crossbar), two DDRs each behind its own MAU. The system bus decodes the address: 0x0000_0000-0x7FFF_FFFF to MAU0 (mau0 + ddr0), 0x8000_0000-0xDFFF_FFFF to MAU1 (mau1 + ddr1). As a crossbar it moves requests to MAU0 and to MAU1, and responses to different masters, at the same time. QoS is set on the system bus and on each MAU (masters). The CPU is one master whose accesses fall in both DDRs. The bus and DDR figures are placeholders: replace them with the chip's.",
+  "platform": {
+    "moduletype": "Container",
+    "params": {
+      "quantum_ns": 1000
+    }
+  },
+  "modules": {
+    "display": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "Display: reads its frame buffer in DDR0 in order at 6000 MB/s.",
+      "params": {
+        "address": "0x0",
+        "size": "0x2000000",
+        "pattern": "sequential",
+        "burst_bytes": 64,
+        "rate_mbps": 6000,
+        "max_outstanding": 16,
+        "count": 0,
+        "duration_ns": 200000,
+        "qos": 2
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "sysbus.target_socket"
+        }
+      }
+    },
+    "cpu": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "CPU cluster: cache-line misses to random addresses in 0x4000_0000-0xBFFF_FFFF, half in each DDR; 70% reads.",
+      "params": {
+        "address": "0x40000000",
+        "size": "0x80000000",
+        "pattern": "random",
+        "read_ratio": 0.7,
+        "burst_bytes": 64,
+        "max_outstanding": 32,
+        "count": 0,
+        "duration_ns": 200000,
+        "seed": 3,
+        "qos": 1
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "sysbus.target_socket"
+        }
+      }
+    },
+    "dma": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "DMA engine: 256-byte writes to DDR1, up to 6000 MB/s.",
+      "params": {
+        "address": "0xC0000000",
+        "size": "0x2000000",
+        "pattern": "sequential",
+        "read_ratio": 0,
+        "burst_bytes": 256,
+        "rate_mbps": 6000,
+        "max_outstanding": 4,
+        "count": 0,
+        "duration_ns": 200000,
+        "seed": 2
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "sysbus.target_socket"
+        }
+      }
+    },
+    "sysbus": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "description": "System bus: a crossbar between the masters and the two MAUs, with QoS per master.",
+      "params": {
+        "topology": "crossbar",
+        "clock_mhz": 1000,
+        "data_bytes": 16,
+        "latency_cycles": 2,
+        "arbitration": "priority",
+        "target_queue": 8,
+        "masters": "cpu: priority=3; display: min_mbps=6000; dma: min_mbps=6000"
+      }
+    },
+    "mau0": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "description": "MAU0: arbitrates the accesses to DDR0; the CPU goes first, the display has 6000 MB/s reserved.",
+      "params": {
+        "clock_mhz": 1000,
+        "data_bytes": 16,
+        "latency_cycles": 2,
+        "arbitration": "priority",
+        "target_queue": 8,
+        "input_queue": 16,
+        "masters": "cpu: priority=3; display: min_mbps=6000"
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x0",
+          "size": "0x80000000",
+          "relative_addresses": false,
+          "bind": "sysbus.initiator_socket"
+        }
+      }
+    },
+    "mau1": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "description": "MAU1: arbitrates the accesses to DDR1; the CPU goes first, the DMA has 6000 MB/s reserved.",
+      "params": {
+        "clock_mhz": 1000,
+        "data_bytes": 16,
+        "latency_cycles": 2,
+        "arbitration": "priority",
+        "target_queue": 8,
+        "input_queue": 16,
+        "masters": "cpu: priority=3; dma: min_mbps=6000"
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x80000000",
+          "size": "0x60000000",
+          "relative_addresses": false,
+          "bind": "sysbus.initiator_socket"
+        }
+      }
+    },
+    "ddr0": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "DDR0, DDR4-3200 x64: 0x0000_0000-0x7FFF_FFFF (2 GiB).",
+      "params": {
+        "clock_mhz": 1600,
+        "data_bytes": 8,
+        "banks": 16,
+        "row_bytes": 8192,
+        "tRCD": 22,
+        "tCL": 22,
+        "tRP": 22,
+        "scheduler": "fr_fcfs",
+        "qos": true
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x0",
+          "size": "0x80000000",
+          "bind": "mau0.initiator_socket"
+        }
+      }
+    },
+    "ddr1": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "DDR1, DDR4-3200 x64: 0x8000_0000-0xDFFF_FFFF (1.5 GiB).",
+      "params": {
+        "clock_mhz": 1600,
+        "data_bytes": 8,
+        "banks": 16,
+        "row_bytes": 8192,
+        "tRCD": 22,
+        "tCL": 22,
+        "tRP": 22,
+        "scheduler": "fr_fcfs",
+        "qos": true
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x80000000",
+          "size": "0x60000000",
+          "bind": "mau1.initiator_socket"
+        }
+      }
+    },
+    "stats": {
+      "type": "perf_stats",
+      "dylib": "perf",
+      "params": {
+        "output": "mau-sysbus.perf.json"
+      }
+    }
+  }
+}

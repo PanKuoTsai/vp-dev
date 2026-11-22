@@ -1,0 +1,29 @@
+# Packaged extension and standalone builds
+*.vsix
+*.AppImage
+
+# Build outputs of the tools users build on their machine
+tools/qbox-catalog/qbox-catalog
+tools/sim-agent/*.so
+tools/sim-agent/*.json
+tools/*/build/
+models/*/build/
+**/build/
+
+# Theia (see also theia/.gitignore)
+theia/node_modules/
+theia/*/dist/
+theia/*/gen-esbuild*.mjs
+
+# Local tool and editor state
+.claude/settings.local.json
+sshd_pw_config
+**/__pycache__/
+*.pyc
+*.log
+.DS_Store
+theia/*/.browser_modules/
+
+# Internal development notes and plans (kept local)
+CLAUDE.md
+docs/

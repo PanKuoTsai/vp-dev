@@ -1,0 +1,1525 @@
+From: VP Studio
+Subject: [PATCH] systemc-components: add VP Studio's probes and debug_dap
+
+VP Studio's SystemC models, built with QBox like its other components:
+
+- probes (build/probes.so): module types tracer and signal_tracer, the
+  transaction and signal probes VP Studio inserts into a platform when it
+  starts a simulation with tracing, and the trace store they share with the
+  sim agent (TraceStore, InitiatorNames). VP Studio's sim agent (sim_agent.so,
+  built by "VP Studio: Build Sim Agent") links to probes.so, so this patch is
+  needed before the agent can be built.
+- debug_dap (build/debug_dap.so): module type debug_dap, an OpenOCD
+  remote_bitbang JTAG port with an ADIv5 debug access port (AXI MEM-AP on the
+  platform's router, APB-AP with a ROM table, per-core external debug
+  registers and CTIs that halt and resume the CPUs), used by "Start
+  Simulation with OpenOCD Port".
+
+The shared singletons are defined in src/probes.cc, not inline in the header:
+QBox loads module libraries with RTLD_LOCAL, so inline ones would be
+duplicated in every library that includes probes.h.
+
+Nothing else in QBox changes; platforms that do not use these types are not
+affected.
+---
+diff --git a/systemc-components/CMakeLists.txt b/systemc-components/CMakeLists.txt
+index 8248f32b..058568d8 100644
+--- a/systemc-components/CMakeLists.txt
++++ b/systemc-components/CMakeLists.txt
+@@ -15,6 +15,9 @@ add_subdirectory(timeprinter)
+ add_subdirectory(tlm_bus_width_bridges)
+ add_subdirectory(uart)
+ add_subdirectory(write_gpio)
++# VP Studio: probes (transaction and signal tracing) and the OpenOCD debug port.
++add_subdirectory(probes)
++add_subdirectory(debug_dap)
+ add_subdirectory(realtimelimiter)
+ add_subdirectory(dmi_converter)
+ add_subdirectory(monitor)
+diff --git a/systemc-components/debug_dap/CMakeLists.txt b/systemc-components/debug_dap/CMakeLists.txt
+new file mode 100644
+index 00000000..87851a26
+--- /dev/null
++++ b/systemc-components/debug_dap/CMakeLists.txt
+@@ -0,0 +1 @@
++gs_create_dymod(debug_dap)
+diff --git a/systemc-components/debug_dap/README.md b/systemc-components/debug_dap/README.md
+new file mode 100644
+index 00000000..b1007062
+--- /dev/null
++++ b/systemc-components/debug_dap/README.md
+@@ -0,0 +1,43 @@
++# debug_dap: OpenOCD debug port for VP Studio
++
++The `debug_dap` module (source in `include/debug_dap.h`) lets OpenOCD connect to the
++simulation as it would to a board's JTAG port (G-13, first stage). OpenOCD
++uses its `remote_bitbang` adapter: every byte on the TCP connection is a pin
++change or a TDO read.
++
++Behind the JTAG TAP (IR 4 bits, IDCODE `0x4BA00477`) is an ADIv5 JTAG-DP
++(DPIDR `0x4BA01477`, DPv1) with two access ports:
++- **AP0, AXI MEM-AP** (IDR `0x44770004`, 64-bit addresses): the `mem` socket,
++  bound to the router the CPUs use. Accesses use the debug transport, or a
++  zero-delay `b_transport` when the target has none, on the module's own
++  SystemC thread (they also go through while the agent has paused the
++  simulation). 8-, 16- and 32-bit accesses, single address increment; packed
++  increment is reported as unsupported.
++- **AP1, APB-AP** (IDR `0x44770002`): a debug bus inside the model. ROM table
++  at `0x80000000`; core n's Armv8 external debug registers at
++  `0x80010000 + n * 0x20000`, its CTI `0x10000` above that.
++
++Halting: a CTI channel event (CTIAPPPULSE or CTIAPPSET), routed by CTIOUTEN0,
++raises trigger out 0 (debug request). If EDSCR.HDE is set, the core halts:
++the module writes `true` to `halt_n`, which is bound to the CPU's QBox `halt`
++signal (QEMU's per-CPU stop, so interrupts do not wake it). EDSCR.STATUS
++becomes `0x13` and EDPRSR.HALTED is set; trigger in 0 then raises the channels
++in CTIINEN0 (cross-halt, through the gates of the other CTIs). Trigger out 1
++(restart), with the debug request acknowledged by CTIINTACK, resumes it and
++sets EDPRSR.SDR. The module only writes the signal when it changes: QBox
++calls the CPU's halt callback on every write.
++
++Parameters: `port` (TCP port, 0 for none), `host` (default `127.0.0.1`),
++`cpus` (number of `halt_N` sockets), `midr` (shown in MIDR_EL1).
++
++Not in this stage: instructions through EDITR (OpenOCD's `aarch64` target
++reads core registers that way, so it cannot be used yet), halting step,
++breakpoints and watchpoints (their registers only hold values), EDPCSR.
++Resuming a core sets QEMU's `halted` to 0, so a core that was in WFI wakes up
++(allowed), and a core the guest powered off must not be resumed.
++
++VP Studio's `lib/debugdap.js` adds the module to a platform and writes the OpenOCD
++configuration (`vp.sys` and `vp.dbg` mem_ap targets, one CTI per core, and
++the commands `vp_halt`, `vp_resume` and `vp_status`).
++
++Built with QBox (`gs_create_dymod`, `build/debug_dap.so`). The module type is `debug_dap`, as the library, so QBox finds it by the type name (no `dylib_path`). Up to VP Studio's sim agent 0.13.0 the module was `vp_debug_dap`, in the agent's library.
+diff --git a/systemc-components/debug_dap/include/debug_dap.h b/systemc-components/debug_dap/include/debug_dap.h
+new file mode 100644
+index 00000000..fed677b1
+--- /dev/null
++++ b/systemc-components/debug_dap/include/debug_dap.h
+@@ -0,0 +1,762 @@
++/*
++ * debug_dap: a JTAG-reachable Arm debug port for a QBox platform, so that
++ * OpenOCD can connect to the simulation (G-13, first stage).
++ *
++ * OpenOCD talks to it with its remote_bitbang adapter over TCP. Behind the
++ * JTAG TAP is an ADIv5 JTAG-DP with two access ports:
++ *   AP0  AXI MEM-AP on the system bus (the `mem` socket, bound to a router):
++ *        reads and writes anywhere the CPUs can, 64-bit addresses.
++ *   AP1  APB-AP on a debug bus inside this model: a ROM table and, for each
++ *        core, Armv8 external debug registers and a CTI.
++ * A debug request from a CTI (trigger out 0) halts the core through its QBox
++ * `halt` signal (QEMU's per-CPU stop); a restart request (trigger out 1)
++ * resumes it. EDSCR.STATUS and EDPRSR.HALTED follow.
++ *
++ * Not in this stage: instructions through EDITR (so OpenOCD's aarch64 target
++ * cannot read core registers yet), halting step, and breakpoints or
++ * watchpoints (their registers only hold values).
++ *
++ * Debug bus map (AP1): ROM table at DBG_BASE, core n's debug registers at
++ * DBG_BASE + 0x10000 + n * 0x20000, its CTI 0x10000 above that.
++ */
++#ifndef DEBUG_DAP_H
++#define DEBUG_DAP_H
++
++#include <systemc>
++#include <tlm>
++#include <cci_configuration>
++#include <scp/report.h>
++#include <async_event.h>
++#include <module_factory_registery.h>
++#include <tlm_utils/simple_initiator_socket.h>
++#include <tlm_sockets_buswidth.h>
++#include <ports/initiator-signal-socket.h>
++
++#include <arpa/inet.h>
++#include <netinet/in.h>
++#include <netinet/tcp.h>
++#include <poll.h>
++#include <sys/socket.h>
++#include <unistd.h>
++
++#include <atomic>
++#include <cerrno>
++#include <chrono>
++#include <cstdio>
++#include <cstring>
++#include <deque>
++#include <functional>
++#include <future>
++#include <memory>
++#include <mutex>
++#include <string>
++#include <thread>
++#include <vector>
++
++
++class debug_dap : public sc_core::sc_module
++{
++    SCP_LOGGER();
++
++public:
++    static constexpr uint32_t DBG_BASE = 0x80000000u;
++    static uint32_t core_base(unsigned n) { return DBG_BASE + 0x10000u + n * 0x20000u; }
++    static uint32_t cti_base(unsigned n) { return core_base(n) + 0x10000u; }
++
++    cci::cci_param<unsigned> p_port;
++    cci::cci_param<unsigned> p_cpus;
++    cci::cci_param<std::string> p_host;
++    cci::cci_param<uint64_t> p_midr;
++    tlm_utils::simple_initiator_socket<debug_dap, DEFAULT_TLM_BUSWIDTH> mem;
++    sc_core::sc_vector<InitiatorSignalSocket<bool>> halt;
++
++    SC_HAS_PROCESS(debug_dap);
++    explicit debug_dap(const sc_core::sc_module_name& n)
++        : sc_core::sc_module(n)
++        , p_port("port", 0, "TCP port for OpenOCD's remote_bitbang adapter (0: none)")
++        , p_cpus("cpus", 1, "Number of cores: halt_0 .. halt_<cpus-1>, each bound to a CPU's halt signal")
++        , p_host("host", "127.0.0.1", "Address to listen on")
++        , p_midr("midr", 0x414FD0B1, "MIDR_EL1 shown in each core's external debug registers")
++        , mem("mem")
++        , halt("halt", p_cpus.get_value())
++        , m_job_event(false)
++    {
++        m_cores.resize(p_cpus.get_value());
++        SC_THREAD(job_loop);
++    }
++
++    ~debug_dap() override { stop_server(); }
++
++    void start_of_simulation() override
++    {
++        if (p_port.get_value()) start_server();
++    }
++
++    void end_of_simulation() override
++    {
++        stop_server();
++        close_jobs();
++    }
++
++private:
++    /* ------------------------------------------------------------ jobs on the SystemC thread */
++
++    struct Job {
++        std::function<void()> fn;
++        std::promise<void> done;
++    };
++    std::mutex m_jobs_mu;
++    std::deque<std::shared_ptr<Job>> m_jobs;
++    bool m_jobs_closed = false;
++    gs::async_event m_job_event;
++
++    void job_loop()
++    {
++        for (;;) {
++            std::shared_ptr<Job> job;
++            {
++                std::lock_guard<std::mutex> l(m_jobs_mu);
++                if (m_jobs_closed) return;
++                if (!m_jobs.empty()) {
++                    job = m_jobs.front();
++                    m_jobs.pop_front();
++                }
++            }
++            if (!job) {
++                wait(m_job_event);
++                continue;
++            }
++            // Bus accesses and halts also go through while the agent has paused the simulation.
++            sc_core::sc_unsuspendable();
++            try {
++                job->fn();
++            } catch (...) {
++            }
++            job->done.set_value();
++            wait(sc_core::SC_ZERO_TIME);
++            sc_core::sc_suspendable();
++        }
++    }
++
++    /** Run fn on the SystemC thread and wait; false when the simulation is ending. */
++    bool on_sim(std::function<void()> fn)
++    {
++        auto job = std::make_shared<Job>();
++        job->fn = std::move(fn);
++        auto fut = job->done.get_future();
++        {
++            std::lock_guard<std::mutex> l(m_jobs_mu);
++            if (m_jobs_closed) return false;
++            m_jobs.push_back(job);
++        }
++        m_job_event.async_notify();
++        while (fut.wait_for(std::chrono::milliseconds(100)) != std::future_status::ready) {
++            if (m_stop.load()) return false;
++        }
++        return true;
++    }
++
++    void close_jobs()
++    {
++        std::deque<std::shared_ptr<Job>> pending;
++        {
++            std::lock_guard<std::mutex> l(m_jobs_mu);
++            m_jobs_closed = true;
++            pending.swap(m_jobs);
++        }
++        for (auto& j : pending) j->done.set_value();
++    }
++
++    /* ------------------------------------------------------------ remote_bitbang server */
++
++    std::thread m_thread;
++    std::atomic<bool> m_stop{ false };
++    int m_listen = -1;
++
++    void start_server()
++    {
++        m_listen = ::socket(AF_INET, SOCK_STREAM, 0);
++        int one = 1;
++        setsockopt(m_listen, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
++        sockaddr_in a{};
++        a.sin_family = AF_INET;
++        a.sin_port = htons(uint16_t(p_port.get_value()));
++        if (inet_pton(AF_INET, p_host.get_value().c_str(), &a.sin_addr) != 1 || bind(m_listen, (sockaddr*)&a, sizeof a) != 0 ||
++            listen(m_listen, 1) != 0) {
++            SCP_WARN(())("debug-dap: cannot listen on {}:{}: {}", p_host.get_value(), p_port.get_value(), std::strerror(errno));
++            ::close(m_listen);
++            m_listen = -1;
++            return;
++        }
++        std::fprintf(stderr, "debug-dap: remote_bitbang listening on %s:%u\n", p_host.get_value().c_str(), p_port.get_value());
++        m_thread = std::thread([this] { serve(); });
++    }
++
++    void stop_server()
++    {
++        m_stop.store(true);
++        if (m_thread.joinable()) m_thread.join();
++        if (m_listen >= 0) {
++            ::close(m_listen);
++            m_listen = -1;
++        }
++    }
++
++    void serve()
++    {
++        while (!m_stop.load()) {
++            pollfd p{ m_listen, POLLIN, 0 };
++            if (poll(&p, 1, 200) <= 0) continue;
++            int c = accept(m_listen, nullptr, nullptr);
++            if (c < 0) continue;
++            int one = 1;
++            setsockopt(c, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
++            reset_tap();
++            client(c);
++            ::close(c);
++        }
++    }
++
++    /** One OpenOCD connection: each byte is a remote_bitbang command. */
++    void client(int fd)
++    {
++        char in[4096];
++        std::string out;
++        while (!m_stop.load()) {
++            pollfd p{ fd, POLLIN, 0 };
++            int r = poll(&p, 1, 200);
++            if (r < 0) return;
++            if (r == 0) continue;
++            ssize_t n = ::read(fd, in, sizeof in);
++            if (n <= 0) return;
++            out.clear();
++            for (ssize_t i = 0; i < n; i++) {
++                const char ch = in[i];
++                if (ch >= '0' && ch <= '7') {
++                    const int v = ch - '0';
++                    pins((v >> 2) & 1, (v >> 1) & 1, v & 1);
++                } else if (ch == 'R') {
++                    out.push_back(m_tdo ? '1' : '0');
++                } else if (ch == 'r' || ch == 's') {
++                    reset_tap(); // TRST asserted
++                } else if (ch == 'Q') {
++                    flush(fd, out);
++                    return;
++                }
++                // 'B'/'b' (LED), 't'/'u' (no TRST) and anything else: nothing to do.
++            }
++            if (!flush(fd, out)) return;
++        }
++    }
++
++    static bool flush(int fd, const std::string& s)
++    {
++        size_t off = 0;
++        while (off < s.size()) {
++            ssize_t w = ::write(fd, s.data() + off, s.size() - off);
++            if (w <= 0) return false;
++            off += size_t(w);
++        }
++        return true;
++    }
++
++    /* ------------------------------------------------------------ JTAG TAP (IEEE 1149.1) */
++
++    enum Tap { TLR, RTI, SELDR, CAPDR, SHDR, EX1DR, PADR, EX2DR, UPDDR, SELIR, CAPIR, SHIR, EX1IR, PAIR, EX2IR, UPDIR };
++    static Tap next(Tap s, bool tms)
++    {
++        static const Tap t[16][2] = {
++            { RTI, TLR }, { RTI, SELDR }, { CAPDR, SELIR }, { SHDR, EX1DR }, { SHDR, EX1DR }, { PADR, UPDDR },
++            { PADR, EX2DR }, { SHDR, UPDDR }, { RTI, SELDR }, { CAPIR, TLR }, { SHIR, EX1IR }, { SHIR, EX1IR },
++            { PAIR, UPDIR }, { PAIR, EX2IR }, { SHIR, UPDIR }, { RTI, SELDR },
++        };
++        return t[s][tms ? 1 : 0];
++    }
++
++    enum Ir : uint32_t { IR_ABORT = 0x8, IR_DPACC = 0xA, IR_APACC = 0xB, IR_IDCODE = 0xE, IR_BYPASS = 0xF };
++    static constexpr uint32_t IDCODE = 0x4BA00477; // as Arm JTAG-DPs report it
++    Tap m_state = TLR;
++    bool m_tck = false, m_tdo = false;
++    uint32_t m_ir = IR_IDCODE, m_ir_shift = 0;
++    uint64_t m_dr = 0;
++    unsigned m_dr_len = 32;
++
++    void reset_tap()
++    {
++        m_state = TLR;
++        m_ir = IR_IDCODE;
++    }
++
++    unsigned dr_length() const
++    {
++        switch (m_ir) {
++        case IR_ABORT:
++        case IR_DPACC:
++        case IR_APACC:
++            return 35;
++        case IR_IDCODE:
++            return 32;
++        default:
++            return 1;
++        }
++    }
++
++    /** TMS and TDI are sampled on the rising edge of TCK; TDO and the register actions follow on the falling edge. */
++    void pins(bool tck, bool tms, bool tdi)
++    {
++        if (!m_tck && tck) {
++            if (m_state == SHDR) m_dr = (m_dr >> 1) | (uint64_t(tdi) << (m_dr_len - 1));
++            if (m_state == SHIR) m_ir_shift = (m_ir_shift >> 1) | (uint32_t(tdi) << 3);
++            m_state = next(m_state, tms);
++        } else if (m_tck && !tck) {
++            switch (m_state) {
++            case TLR:
++                m_ir = IR_IDCODE;
++                break;
++            case CAPDR:
++                m_dr_len = dr_length();
++                m_dr = capture_dr();
++                break;
++            case SHDR:
++                m_tdo = m_dr & 1;
++                break;
++            case UPDDR:
++                update_dr(m_dr & ((uint64_t(1) << m_dr_len) - 1));
++                break;
++            case CAPIR:
++                m_ir_shift = 0x1;
++                break;
++            case SHIR:
++                m_tdo = m_ir_shift & 1;
++                break;
++            case UPDIR:
++                m_ir = m_ir_shift & 0xF;
++                break;
++            default:
++                break;
++            }
++        }
++        m_tck = tck;
++    }
++
++    /* ------------------------------------------------------------ ADIv5 JTAG-DP */
++
++    static constexpr uint32_t DPIDR = 0x4BA01477; // DPv1, designer Arm
++    static constexpr uint8_t ACK_OK = 0x2, ACK_WAIT = 0x1;
++    uint32_t m_ctrlstat = 0, m_select = 0, m_rdbuff = 0, m_pending = 0;
++
++    uint64_t capture_dr()
++    {
++        switch (m_ir) {
++        case IR_IDCODE:
++            return IDCODE;
++        case IR_DPACC:
++        case IR_APACC:
++        case IR_ABORT:
++            return (uint64_t(m_pending) << 3) | ACK_OK;
++        default:
++            return 0;
++        }
++    }
++
++    void update_dr(uint64_t v)
++    {
++        const bool read = v & 1;
++        const uint32_t a = uint32_t((v >> 1) & 3) << 2;
++        const uint32_t data = uint32_t(v >> 3);
++        if (m_ir == IR_ABORT) {
++            // STKCMPCLR, STKERRCLR, WDERRCLR, ORUNERRCLR
++            if (data & (1u << 1)) m_ctrlstat &= ~(1u << 4);
++            if (data & (1u << 2)) m_ctrlstat &= ~(1u << 5);
++            if (data & (1u << 3)) m_ctrlstat &= ~(1u << 7);
++            if (data & (1u << 4)) m_ctrlstat &= ~(1u << 1);
++        } else if (m_ir == IR_DPACC) {
++            dp_access(read, a, data);
++        } else if (m_ir == IR_APACC) {
++            const unsigned apsel = m_select >> 24;
++            const uint32_t reg = (m_select & 0xF0) | a;
++            uint32_t r = 0;
++            const bool ok = ap_access(apsel, read, reg, data, r);
++            if (!ok) m_ctrlstat |= 1u << 5; // STICKYERR
++            if (read) {
++                m_rdbuff = r;
++                m_pending = r;
++            }
++        }
++    }
++
++    void dp_access(bool read, uint32_t a, uint32_t data)
++    {
++        if (read) {
++            switch (a) {
++            case 0x0:
++                m_pending = DPIDR;
++                break;
++            case 0x4: {
++                // Power-up and reset acknowledges follow their requests.
++                uint32_t v = m_ctrlstat & ~((1u << 31) | (1u << 29) | (1u << 27));
++                if (m_ctrlstat & (1u << 30)) v |= 1u << 31;
++                if (m_ctrlstat & (1u << 28)) v |= 1u << 29;
++                if (m_ctrlstat & (1u << 26)) v |= 1u << 27;
++                m_pending = v;
++                break;
++            }
++            case 0x8:
++                m_pending = m_select;
++                break;
++            default:
++                m_pending = m_rdbuff;
++                break;
++            }
++            return;
++        }
++        switch (a) {
++        case 0x4: {
++            // Sticky flags are cleared by writing 1 on a JTAG-DP; the request bits and TRNMODE hold.
++            const uint32_t w1c = (1u << 1) | (1u << 4) | (1u << 5) | (1u << 7);
++            m_ctrlstat &= ~(data & w1c);
++            const uint32_t rw = (1u << 30) | (1u << 28) | (1u << 26) | (0xFu << 8) | (3u << 2) | 1u;
++            m_ctrlstat = (m_ctrlstat & ~rw) | (data & rw);
++            break;
++        }
++        case 0x8:
++            m_select = data;
++            break;
++        default:
++            break;
++        }
++    }
++
++    /* ------------------------------------------------------------ MEM-APs */
++
++    struct MemAp {
++        uint32_t csw = 0x2; // 32-bit, no increment
++        uint64_t tar = 0;
++    };
++    MemAp m_ap[2];
++
++    bool ap_access(unsigned apsel, bool read, uint32_t reg, uint32_t data, uint32_t& r)
++    {
++        if (apsel > 1) {
++            r = 0; // no such AP: IDR reads as 0
++            return true;
++        }
++        MemAp& ap = m_ap[apsel];
++        const bool sys = apsel == 0;
++        switch (reg) {
++        case 0x00: // CSW
++            if (read) {
++                r = ap.csw | (1u << 6); // DeviceEn
++            } else {
++                uint32_t v = data;
++                if (((v >> 4) & 3) > 1) v &= ~(3u << 4); // packed increment: not supported
++                if (!sys) v = (v & ~7u) | 2u;            // the APB-AP is 32-bit only
++                ap.csw = v & ~((1u << 6) | (1u << 7));
++            }
++            return true;
++        case 0x04: // TAR (low)
++            if (read)
++                r = uint32_t(ap.tar);
++            else
++                ap.tar = (ap.tar & ~uint64_t(0xFFFFFFFFu)) | data;
++            return true;
++        case 0x08: // TAR (high), with large addresses
++            if (read)
++                r = sys ? uint32_t(ap.tar >> 32) : 0;
++            else if (sys)
++                ap.tar = (ap.tar & 0xFFFFFFFFu) | (uint64_t(data) << 32);
++            return true;
++        case 0x0C: { // DRW
++            const unsigned size = ap.csw & 7;
++            const unsigned bytes = size == 0 ? 1 : size == 1 ? 2 : 4;
++            if (size > 2) return false;
++            const bool ok = sys ? sys_access(read, ap.tar, bytes, data, r) : dbg_access(read, uint32_t(ap.tar), data, r);
++            if (((ap.csw >> 4) & 3) == 1) ap.tar += bytes;
++            return ok;
++        }
++        case 0x10:
++        case 0x14:
++        case 0x18:
++        case 0x1C: { // BD0..BD3
++            const uint64_t addr = (ap.tar & ~uint64_t(0xF)) | (reg & 0xC);
++            return sys ? sys_access(read, addr, 4, data, r) : dbg_access(read, uint32_t(addr), data, r);
++        }
++        case 0xF0: // BASE (high)
++            r = 0;
++            return true;
++        case 0xF4: // CFG: large addresses on the system AP
++            r = sys ? 0x2 : 0x0;
++            return true;
++        case 0xF8: // BASE: the ROM table on the debug AP
++            r = sys ? 0x2 : (DBG_BASE | 0x3);
++            return true;
++        case 0xFC: // IDR
++            r = sys ? 0x44770004 : 0x44770002; // AXI-AP, APB-AP
++            return true;
++        default:
++            r = 0;
++            return true;
++        }
++    }
++
++    /** A system bus access on the SystemC thread: debug transport, else a zero-delay normal access. */
++    bool sys_access(bool read, uint64_t addr, unsigned bytes, uint32_t data, uint32_t& r)
++    {
++        const unsigned lane = unsigned(addr & 3);
++        if (lane + bytes > 4) return false; // unaligned across the 32-bit data bus
++        unsigned char buf[4] = { 0, 0, 0, 0 };
++        if (!read)
++            for (unsigned i = 0; i < bytes; i++) buf[i] = uint8_t(data >> (8 * (lane + i)));
++        bool ok = false;
++        if (!on_sim([&] {
++                tlm::tlm_generic_payload t;
++                t.set_command(read ? tlm::TLM_READ_COMMAND : tlm::TLM_WRITE_COMMAND);
++                t.set_address(addr);
++                t.set_data_ptr(buf);
++                t.set_data_length(bytes);
++                t.set_streaming_width(bytes);
++                t.set_byte_enable_ptr(nullptr);
++                t.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
++                unsigned n = mem->transport_dbg(t);
++                if (n == 0 && t.get_response_status() == tlm::TLM_INCOMPLETE_RESPONSE) {
++                    sc_core::sc_time delay = sc_core::SC_ZERO_TIME;
++                    t.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
++                    mem->b_transport(t, delay);
++                    n = t.get_response_status() == tlm::TLM_OK_RESPONSE ? bytes : 0;
++                }
++                ok = t.get_response_status() == tlm::TLM_OK_RESPONSE && n > 0;
++            }))
++            return false;
++        if (read) {
++            r = 0;
++            for (unsigned i = 0; i < bytes; i++) r |= uint32_t(buf[i]) << (8 * (lane + i));
++        }
++        return ok;
++    }
++
++    /* ------------------------------------------------------------ debug bus: ROM table, core debug, CTI */
++
++    struct Core {
++        uint32_t edscr = 0;      // writable bits only
++        bool halted = false;
++        bool sdr = false;        // EDPRSR.SDR, sticky debug restart
++        bool oslk = true;        // the OS lock is set at reset
++        uint32_t edprcr = 0;
++        uint32_t bvr[12] = {}, bcr[6] = {}, wvr[8] = {}, wcr[4] = {};
++        // CTI
++        bool cti_en = false;
++        uint32_t inen[8] = {}, outen[8] = {};
++        uint32_t gate = 0xF;
++        uint32_t appset = 0;     // channels held by CTIAPPSET
++        uint32_t trigout = 0;    // latched trigger outputs, cleared by CTIINTACK
++    };
++    std::mutex m_dbg_mu;
++    std::vector<Core> m_cores;
++
++    static constexpr uint32_t EDSCR_HDE = 1u << 14;
++    static constexpr uint32_t EDSCR_WRITABLE = (1u << 30) | (1u << 29) | (3u << 22) | (1u << 21) | (1u << 20) | EDSCR_HDE | (1u << 3);
++
++    /** CoreSight identification registers at 0xFD0..0xFFC. */
++    static bool id_regs(uint32_t off, unsigned cls, uint32_t part, uint32_t& r)
++    {
++        switch (off) {
++        case 0xFD0: r = 0x04; return true;                         // PIDR4: JEP106 continuation 4 (Arm)
++        case 0xFE0: r = part & 0xFF; return true;                   // PIDR0
++        case 0xFE4: r = 0xB0 | ((part >> 8) & 0xF); return true;    // PIDR1: JEP106 0x3B, low bits
++        case 0xFE8: r = 0x0B; return true;                          // PIDR2: JEP106 high bits, JEDEC
++        case 0xFEC: r = 0x00; return true;                          // PIDR3
++        case 0xFF0: r = 0x0D; return true;                          // CIDR0..3
++        case 0xFF4: r = cls << 4; return true;
++        case 0xFF8: r = 0x05; return true;
++        case 0xFFC: r = 0xB1; return true;
++        default: return false;
++        }
++    }
++
++    bool dbg_access(bool read, uint32_t addr, uint32_t data, uint32_t& r)
++    {
++        std::vector<std::pair<unsigned, bool>> halts; // core, halt (true) or resume
++        bool ok = true;
++        {
++            std::lock_guard<std::mutex> l(m_dbg_mu);
++            r = 0;
++            if (addr >= DBG_BASE && addr < DBG_BASE + 0x1000) {
++                ok = rom_access(read, addr - DBG_BASE, r);
++            } else if (addr >= core_base(0) && addr < core_base(unsigned(m_cores.size()))) {
++                const unsigned n = (addr - core_base(0)) / 0x20000;
++                const uint32_t off = (addr - core_base(0)) % 0x20000;
++                if (off < 0x1000)
++                    ok = core_access(n, read, off, data, r);
++                else if (off >= 0x10000 && off < 0x11000)
++                    ok = cti_access(n, read, off - 0x10000, data, r, halts);
++                else
++                    r = 0;
++            } else {
++                ok = false; // nothing there: the access errs
++            }
++        }
++        for (auto& h : halts) signal_halt(h.first, h.second);
++        return ok;
++    }
++
++    bool rom_access(bool read, uint32_t off, uint32_t& r)
++    {
++        if (!read) return true;
++        const unsigned entries = 2 * unsigned(m_cores.size());
++        if (off < 4 * entries) {
++            const unsigned k = off / 4;
++            const uint32_t target = (k % 2 == 0) ? core_base(k / 2) : cti_base(k / 2);
++            r = (target - DBG_BASE) | 0x3; // offset, 32-bit format, present
++            return true;
++        }
++        if (off == 0xFCC) {
++            r = 0; // MEMTYPE: no system memory on this bus
++            return true;
++        }
++        if (id_regs(off, 0x1, 0x4C0, r)) return true;
++        r = 0; // end of the table and reserved
++        return true;
++    }
++
++    uint32_t edscr(const Core& c) const
++    {
++        uint32_t v = c.edscr & EDSCR_WRITABLE;
++        v |= c.halted ? 0x13 : 0x02; // STATUS: halted by an external debug request, or not in Debug state
++        v |= 1u << 24;               // ITE: the instruction register is empty
++        if (c.halted) v |= 1u << 8;  // EL: 1 (where the Ubuntu kernel runs)
++        v |= 0xFu << 10;             // RW: AArch64 at every EL
++        return v;
++    }
++
++    bool core_access(unsigned n, bool read, uint32_t off, uint32_t data, uint32_t& r)
++    {
++        Core& c = m_cores[n];
++        if (id_regs(off, 0x9, 0xD0B, r)) return true;
++        if (read) {
++            switch (off) {
++            case 0x088: r = edscr(c); return true;
++            case 0x314: { // EDPRSR
++                r = 1u; // PU: powered up
++                if (c.halted) r |= 1u << 4;
++                if (c.oslk) r |= 1u << 5;
++                if (c.sdr) r |= 1u << 11;
++                c.sdr = false; // cleared by the read
++                return true;
++            }
++            case 0x310: r = c.edprcr; return true;
++            case 0x0A0: case 0x0AC: r = 0xFFFFFFFF; return true; // EDPCSR: no PC sampling
++            case 0xD00: r = uint32_t(p_midr.get_value()); return true;
++            case 0xD20: r = 0x01000011; return true; // ID_AA64PFR0_EL1 (low): GIC, EL0/EL1 AArch64
++            case 0xD28: r = 0x10305408; return true; // ID_AA64DFR0_EL1 (low): debug v8.2, 6 breakpoints, 4 watchpoints
++            case 0xFB4: r = 0; return true;          // EDLSR: no software lock
++            case 0xFB8: r = 0xAA; return true;       // EDAUTHSTATUS: debug enabled
++            case 0xFBC: r = 0x47706A15; return true; // EDDEVARCH: Armv8-A debug
++            case 0xFCC: r = 0x15; return true;       // EDDEVTYPE: debug logic, processor
++            default: break;
++            }
++            if (off >= 0x400 && off < 0x400 + 16 * 6) { r = (off & 0xF) == 0 ? c.bvr[(off - 0x400) / 16 * 2] : (off & 0xF) == 4 ? c.bvr[(off - 0x400) / 16 * 2 + 1] : (off & 0xF) == 8 ? c.bcr[(off - 0x400) / 16] : 0; return true; }
++            if (off >= 0x800 && off < 0x800 + 16 * 4) { r = (off & 0xF) == 0 ? c.wvr[(off - 0x800) / 16 * 2] : (off & 0xF) == 4 ? c.wvr[(off - 0x800) / 16 * 2 + 1] : (off & 0xF) == 8 ? c.wcr[(off - 0x800) / 16] : 0; return true; }
++            r = 0;
++            return true;
++        }
++        switch (off) {
++        case 0x088: c.edscr = data & EDSCR_WRITABLE; return true;
++        case 0x090: return true; // EDRCR: nothing sticky to clear in this stage
++        case 0x300: c.oslk = data & 1; return true; // OSLAR_EL1
++        case 0x310: c.edprcr = data & 0xF; return true;
++        case 0xFB0: return true; // EDLAR
++        default: break;
++        }
++        if (off >= 0x400 && off < 0x400 + 16 * 6) { const unsigned i = (off - 0x400) / 16; if ((off & 0xF) == 0) c.bvr[2 * i] = data; else if ((off & 0xF) == 4) c.bvr[2 * i + 1] = data; else if ((off & 0xF) == 8) c.bcr[i] = data; return true; }
++        if (off >= 0x800 && off < 0x800 + 16 * 4) { const unsigned i = (off - 0x800) / 16; if ((off & 0xF) == 0) c.wvr[2 * i] = data; else if ((off & 0xF) == 4) c.wvr[2 * i + 1] = data; else if ((off & 0xF) == 8) c.wcr[i] = data; return true; }
++        return true; // other registers ignore writes in this stage
++    }
++
++    /*
++     * CTI: channel events reach every CTI whose gate lets the channel through
++     * (the cross-trigger matrix). Trigger out 0 is the core's debug request,
++     * trigger out 1 its restart request. Entering Debug state raises trigger
++     * in 0 (cross-halt).
++     */
++    bool cti_access(unsigned n, bool read, uint32_t off, uint32_t data, uint32_t& r, std::vector<std::pair<unsigned, bool>>& halts)
++    {
++        Core& c = m_cores[n];
++        if (id_regs(off, 0x9, 0x9ED, r)) return true;
++        if (read) {
++            if (off == 0x000) r = c.cti_en ? 1 : 0;
++            else if (off >= 0x020 && off < 0x040) r = c.inen[(off - 0x020) / 4];
++            else if (off >= 0x0A0 && off < 0x0C0) r = c.outen[(off - 0x0A0) / 4];
++            else if (off == 0x130) r = c.halted ? 1 : 0;        // CTITRIGINSTATUS
++            else if (off == 0x134) r = c.trigout;                // CTITRIGOUTSTATUS
++            else if (off == 0x138) r = 0;                        // CTICHINSTATUS
++            else if (off == 0x13C) r = c.appset;                 // CTICHOUTSTATUS
++            else if (off == 0x140) r = c.gate;
++            else if (off == 0xFB4) r = 0;                        // CTILSR
++            else if (off == 0xFBC) r = 0x47701A14;               // CTIDEVARCH
++            else if (off == 0xFC8) r = (4u << 16) | (8u << 8);   // CTIDEVID: 4 channels, 8 triggers
++            else if (off == 0xFCC) r = 0x14;                     // CTIDEVTYPE
++            else r = 0;
++            return true;
++        }
++        if (off == 0x000) c.cti_en = data & 1;
++        else if (off == 0x010) c.trigout &= ~data;               // CTIINTACK
++        else if (off == 0x014) { c.appset |= data & 0xF; channels(n, data & 0xF, halts); }
++        else if (off == 0x018) c.appset &= ~data;
++        else if (off == 0x01C) channels(n, data & 0xF, halts);  // CTIAPPPULSE
++        else if (off >= 0x020 && off < 0x040) c.inen[(off - 0x020) / 4] = data & 0xF;
++        else if (off >= 0x0A0 && off < 0x0C0) c.outen[(off - 0x0A0) / 4] = data & 0xF;
++        else if (off == 0x140) c.gate = data & 0xF;
++        return true;
++    }
++
++    /** Channel events from CTI src: through the matrix to the CTIs, then to their trigger outputs. */
++    void channels(unsigned src, uint32_t ch, std::vector<std::pair<unsigned, bool>>& halts)
++    {
++        if (!m_cores[src].cti_en || !ch) return;
++        // An event leaves its CTI through the gate and reaches the others; it always reaches its own.
++        for (unsigned k = 0; k < m_cores.size(); k++) {
++            const uint32_t got = k == src ? ch : (ch & m_cores[src].gate);
++            if (!got || !m_cores[k].cti_en) continue;
++            for (unsigned t = 0; t < 2; t++) {
++                if (!(m_cores[k].outen[t] & got)) continue;
++                m_cores[k].trigout |= 1u << t;
++                trigger(k, t, halts);
++            }
++        }
++    }
++
++    void trigger(unsigned k, unsigned t, std::vector<std::pair<unsigned, bool>>& halts)
++    {
++        Core& c = m_cores[k];
++        if (t == 0 && !c.halted && (c.edscr & EDSCR_HDE)) {
++            c.halted = true;
++            halts.emplace_back(k, true);
++            // Cross-halt: entering Debug state is trigger in 0.
++            channels_from_trigin(k, halts);
++        } else if (t == 1 && c.halted && !(c.trigout & 1)) {
++            c.halted = false;
++            c.sdr = true;
++            halts.emplace_back(k, false);
++        }
++        if (t == 1) c.trigout &= ~2u; // a restart is a pulse
++    }
++
++    void channels_from_trigin(unsigned k, std::vector<std::pair<unsigned, bool>>& halts)
++    {
++        const uint32_t ch = m_cores[k].inen[0];
++        if (ch) channels(k, ch, halts);
++    }
++
++    /** Halt or resume core n through its QBox halt signal, on the SystemC thread. Writes only changes. */
++    void signal_halt(unsigned n, bool on)
++    {
++        if (n >= halt.size()) return;
++        on_sim([this, n, on] {
++            if (!halt[n].get_interface()) return; // not bound
++            halt[n]->write(on);
++        });
++        std::fprintf(stderr, "debug-dap: core %u %s\n", n, on ? "halted (external debug request)" : "restarted");
++    }
++};
++
++#endif
+diff --git a/systemc-components/debug_dap/src/debug_dap.cc b/systemc-components/debug_dap/src/debug_dap.cc
+new file mode 100644
+index 00000000..92099542
+--- /dev/null
++++ b/systemc-components/debug_dap/src/debug_dap.cc
+@@ -0,0 +1,11 @@
++/*
++ * debug_dap: the JTAG debug port OpenOCD connects to (VP Studio G-13). See debug_dap.h.
++ */
++#include "debug_dap.h"
++
++extern "C" void module_register();
++void module_register()
++{
++    auto broker = cci::cci_get_broker();
++    if (!broker.get_param_handle(CCI_GS_MF_NAME "debug_dap").is_valid()) GSC_MODULE_REGISTER_C(debug_dap);
++}
+diff --git a/systemc-components/probes/CMakeLists.txt b/systemc-components/probes/CMakeLists.txt
+new file mode 100644
+index 00000000..6fc5fb5b
+--- /dev/null
++++ b/systemc-components/probes/CMakeLists.txt
+@@ -0,0 +1 @@
++gs_create_dymod(probes)
+diff --git a/systemc-components/probes/README.md b/systemc-components/probes/README.md
+new file mode 100644
+index 00000000..ffd64944
+--- /dev/null
++++ b/systemc-components/probes/README.md
+@@ -0,0 +1,27 @@
++# vp_probes: probes for VP Studio
++
++Two module types that VP Studio puts in a platform, and the state they share
++with VP Studio's sim agent:
++
++- `tracer`: a pass-through between a router and one target socket of a
++  device. It forwards every call unchanged and records each `b_transport`
++  (address, size, data, status, who issued it). Parameters: `label`,
++  `allow_dmi`, `record`, `router`.
++- `signal_tracer`: placed in a signal connection; records each change of
++  level. Parameters: `label`, `record`.
++- `TraceStore` and `InitiatorNames` (`include/probes.h`): the records, the
++  probes' switches, the bus breakpoints and the table of initiator names.
++  The sim agent (a separate library, built by VP Studio's
++  `tools/sim-agent/build.sh`) links to this one and reads and controls them.
++
++QBox loads libraries with RTLD_LOCAL, so `TraceStore::get()`,
++`InitiatorNames::get()` and `TraceStore::agent_access()` are defined once, in
++`src/probes.cc`, never inline: otherwise each library would get its own
++copy.
++
++Built with QBox (`gs_create_dymod`, `build/probes.so`). Both types are in
++this one library, so platforms name it: `dylib_path = "probes"`. (Up to
++VP Studio's sim agent 0.13.0 the types were vp_tracer and vp_signal_tracer,
++in the agent's library.) VP
++Studio's sim agent README (tools/sim-agent/README.md) describes the probes'
++methods (trace.*, break.*) and how they behave.
+diff --git a/systemc-components/probes/include/probes.h b/systemc-components/probes/include/probes.h
+new file mode 100644
+index 00000000..97994077
+--- /dev/null
++++ b/systemc-components/probes/include/probes.h
+@@ -0,0 +1,369 @@
++/*
++ * vp_probes: probes for VP Studio (transaction and signal tracing, G-12).
++ *
++ * The records, the probes' switches, the bus breakpoints and the table of
++ * initiator names live here, in probes.so. The tracers in this library
++ * write them; VP Studio's sim agent (a separate library that links to this
++ * one) reads and controls them. QBox loads libraries with RTLD_LOCAL, so the
++ * singletons are defined once, in probes.cc, and not inline.
++ */
++#ifndef PROBES_H
++#define PROBES_H
++
++#include <systemc>
++#include <tlm>
++#include <tlm_utils/multi_socket_bases.h>
++#include <tlm-extensions/pathid_extension.h>
++
++#include <algorithm>
++#include <atomic>
++#include <cstdint>
++#include <cstring>
++#include <deque>
++#include <functional>
++#include <map>
++#include <mutex>
++#include <string>
++#include <tuple>
++#include <vector>
++
++#define PROBES_API __attribute__((visibility("default")))
++#define PROBES_VERSION "1.0.0"
++
++/* ---------------------------------------------------------------- transaction trace */
++
++/** One bus access seen by a tracer. */
++struct TraceRecord {
++    uint64_t seq;
++    double time_s;      // simulated time when the access completed (approximate for CPU threads)
++    uint32_t point;     // index into TraceStore::points
++    bool write;
++    uint64_t address;   // absolute: the tracer's base plus the offset the router passed on
++    uint32_t length;
++    uint8_t data[16];   // the first bytes of the data; for a signal, data[0] is its new level
++    int status;         // tlm_response_status
++    bool signal;        // a signal change (signal_tracer), not a bus access
++    uint16_t router;    // the router in front of the tracer (InitiatorNames::router_id)
++    uint8_t npath;      // entries in path: the ids the routers stamped (PathIDExtension), outermost first
++    int16_t path[4];
++};
++
++/**
++ * Who issued a traced access. Each QBox router stamps a transaction with the
++ * index of the target_socket binding it came in on (gs::PathIDExtension, one
++ * entry per router on the way). The index is the order in which initiators
++ * bound to that socket; the socket's binders know the port on the other side.
++ * The table is built once at start_of_simulation (bindings are final then),
++ * before the agent starts serving, and only read afterwards.
++ * Names are relative to the top-level container ("cpu_3.mem", "periph.dma.mem").
++ */
++class InitiatorNames
++{
++public:
++    /** The one table, in probes.so (every library that uses it shares it). */
++    PROBES_API static InitiatorNames& get();
++
++    /** During elaboration: the id of a router named as the platform names it ("router", "periph.bus"); "" = the only router. */
++    uint16_t router_id(const std::string& name)
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        for (size_t i = 0; i < m_router_names.size(); i++)
++            if (m_router_names[i] == name) return uint16_t(i);
++        m_router_names.push_back(name);
++        return uint16_t(m_router_names.size() - 1);
++    }
++
++    static std::string relative(const std::string& n)
++    {
++        const size_t dot = n.find('.');
++        return dot == std::string::npos ? n : n.substr(dot + 1);
++    }
++
++    /** On the SystemC thread, after elaboration: index -> initiator port of every router's target_socket. */
++    void build()
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        m_table.clear();
++        for (auto* o : sc_core::sc_get_top_level_objects()) scan(o);
++        m_built = true;
++    }
++
++    /** The initiator port of an access, or "" when the routers' stamps do not lead to one. */
++    std::string resolve(uint16_t router, uint8_t npath, const int16_t* path)
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        if (!m_built || !npath || router >= m_router_names.size()) return "";
++        std::string cur = m_router_names[router];
++        if (cur.empty()) {
++            if (m_table.size() != 1) return "";
++            cur = m_table.begin()->first;
++        }
++        for (int k = int(npath) - 1; k >= 0; k--) {
++            auto it = m_table.find(cur);
++            if (it == m_table.end() || path[k] < 0 || size_t(path[k]) >= it->second.size()) return "";
++            const std::string& port = it->second[size_t(path[k])];
++            const size_t dot = port.rfind('.');
++            const std::string owner = dot == std::string::npos ? port : port.substr(0, dot);
++            // Came in from another router: continue with the stamp that router made.
++            if (k > 0 && m_table.count(owner)) {
++                cur = owner;
++                continue;
++            }
++            return port;
++        }
++        return "";
++    }
++
++private:
++    void scan(sc_core::sc_object* o)
++    {
++        auto* t = dynamic_cast<tlm_utils::multi_target_base_if<tlm::tlm_base_protocol_types>*>(o);
++        if (t && std::string(o->basename()) == "target_socket" && o->get_parent_object()) {
++            std::vector<std::string> names;
++            for (auto* b : t->get_binders()) {
++                sc_core::sc_port_base* p = b ? b->get_other_side() : nullptr;
++                names.push_back(p ? relative(p->name()) : std::string());
++            }
++            m_table[relative(o->get_parent_object()->name())] = std::move(names);
++        }
++        for (auto* c : o->get_child_objects()) scan(c);
++    }
++
++    std::mutex m_mu;
++    std::vector<std::string> m_router_names;
++    std::map<std::string, std::vector<std::string>> m_table;
++    bool m_built = false;
++};
++
++/**
++ * Records shared by every tracer and read by the agent. Accesses can come
++ * from QEMU vCPU threads as well as the SystemC thread, hence the mutex.
++ */
++class TraceStore
++{
++public:
++    /** The one store, in probes.so: the tracers write it, the sim agent reads it. */
++    PROBES_API static TraceStore& get();
++
++    /**
++     * A probe (G-12). kind: "bus", "memory" or "signal". recording: whether it
++     * records from the start. changed: called on the SystemC thread when
++     * trace.setPoints turns its recording on or off (a memory probe stops or
++     * allows DMI there). Probes are added during elaboration only.
++     */
++    uint32_t add_point(const std::string& label, const char* kind = "bus", bool recording = true,
++                       std::function<void(bool)> changed = {})
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        m_points.push_back(label);
++        m_kinds.push_back(kind);
++        m_on.emplace_back(recording);
++        m_changed.push_back(std::move(changed));
++        return uint32_t(m_points.size() - 1);
++    }
++
++    /** Whether this probe records (its own switch; recording as a whole is enabled()). */
++    bool point_on(uint32_t p) const { return p < m_on.size() && m_on[p].load(std::memory_order_relaxed); }
++    /** Whether an access at this probe is worth handing to record(). */
++    bool wants(uint32_t p) const
++    {
++        return (m_enabled.load(std::memory_order_relaxed) && point_on(p)) ||
++               m_has_breakpoints.load(std::memory_order_relaxed);
++    }
++    /** On the SystemC thread. Returns false for an unknown label. */
++    bool set_point(const std::string& label, bool on)
++    {
++        std::function<void(bool)> cb;
++        {
++            std::lock_guard<std::mutex> l(m_mu);
++            size_t i = 0;
++            while (i < m_points.size() && m_points[i] != label) i++;
++            if (i == m_points.size()) return false;
++            if (m_on[i].exchange(on) == on) return true;
++            cb = m_changed[i];
++        }
++        if (cb) cb(on);
++        return true;
++    }
++    struct PointInfo {
++        std::string label;
++        std::string kind;
++        bool recording;
++    };
++    std::vector<PointInfo> point_info()
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        std::vector<PointInfo> out;
++        for (size_t i = 0; i < m_points.size(); i++) out.push_back({ m_points[i], m_kinds[i], m_on[i].load() });
++        return out;
++    }
++
++    /** Set while the agent itself accesses the bus (mem.read, mem.write): tracers ignore those. */
++    PROBES_API static bool& agent_access();
++
++    /** Every access a tracer sees: kept when recording is on, and checked against the breakpoints. */
++    void record(TraceRecord r)
++    {
++        if (agent_access()) return;
++        const bool keep = m_enabled.load(std::memory_order_relaxed) && point_on(r.point);
++        const bool check = m_has_breakpoints.load(std::memory_order_relaxed);
++        if (!keep && !check) return;
++        std::function<void()> fire;
++        {
++            std::lock_guard<std::mutex> l(m_mu);
++            if (keep) {
++                r.seq = ++m_seq;
++                if (m_records.size() >= CAPACITY) {
++                    m_records.pop_front();
++                    m_dropped++;
++                }
++                m_records.push_back(r);
++            } else {
++                r.seq = 0; // not recorded
++            }
++            if (r.signal) {
++                // Signal changes are recorded only: no breakpoint looks at them.
++            } else if (m_hit.valid) {
++                // The CPUs run on until the pause takes hold. Matching accesses in
++                // that window have happened and will not stop the simulation.
++                m_hit.accesses_after++;
++                for (const auto& b : m_breakpoints) {
++                    if (b.matches(r)) {
++                        m_hit.matches_after++;
++                        break;
++                    }
++                }
++            } else if (check) {
++                for (const auto& b : m_breakpoints) {
++                    if (b.matches(r)) {
++                        m_hit = { true, b.id, r, 0, 0 };
++                        fire = m_on_break; // a copy: the agent may clear it at the end
++                        break;
++                    }
++                }
++            }
++        }
++        if (fire) fire();
++    }
++
++    /*
++     * Breakpoints on bus accesses. An access matches when it is of the right
++     * kind, on the right trace point (or any), overlaps [lo, hi], and, with a
++     * mask, (data & mask) == (value & mask), data read as a little-endian
++     * number from its first 8 bytes. The first match is kept as the hit until
++     * clear_hit(); later accesses only count as accesses_after.
++     */
++    struct Breakpoint {
++        uint32_t id = 0;
++        int point = -1; // -1: any trace point
++        uint64_t lo = 0, hi = ~uint64_t(0);
++        bool on_read = true, on_write = true;
++        uint64_t mask = 0, value = 0; // mask 0: any data
++
++        bool matches(const TraceRecord& r) const
++        {
++            if (r.write ? !on_write : !on_read) return false;
++            if (point >= 0 && uint32_t(point) != r.point) return false;
++            const uint64_t last = r.address + (r.length ? r.length - 1 : 0);
++            if (last < lo || r.address > hi) return false;
++            if (!mask) return true;
++            uint64_t v = 0;
++            const size_t n = std::min<size_t>(8, std::min<size_t>(r.length, sizeof r.data));
++            for (size_t i = 0; i < n; i++) v |= uint64_t(r.data[i]) << (8 * i);
++            return (v & mask) == (value & mask);
++        }
++    };
++    struct Hit {
++        bool valid = false;
++        uint32_t breakpoint = 0;
++        TraceRecord record{};
++        uint64_t accesses_after = 0;
++        uint64_t matches_after = 0; // of those, how many matched a breakpoint too
++    };
++
++    void set_breakpoints(std::vector<Breakpoint> b)
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        m_breakpoints = std::move(b);
++        m_has_breakpoints = !m_breakpoints.empty();
++    }
++    std::vector<Breakpoint> breakpoints()
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        return m_breakpoints;
++    }
++    Hit hit()
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        return m_hit;
++    }
++    void clear_hit()
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        m_hit = Hit{};
++    }
++    /** Called (from any thread, without the lock) when a breakpoint matches. */
++    void set_on_break(std::function<void()> f)
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        m_on_break = std::move(f);
++    }
++    int point_index(const std::string& label)
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        for (size_t i = 0; i < m_points.size(); i++)
++            if (m_points[i] == label) return int(i);
++        return -1;
++    }
++
++    void set_enabled(bool on) { m_enabled = on; }
++    bool enabled() const { return m_enabled.load(); }
++
++    void clear()
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        m_records.clear();
++        m_dropped = 0;
++    }
++
++    /** Records with seq > since, at most max of them, oldest first. */
++    void read(uint64_t since, size_t max, std::vector<TraceRecord>& out, uint64_t& last_seq, uint64_t& dropped,
++              std::vector<std::string>& points)
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        auto it = std::upper_bound(m_records.begin(), m_records.end(), since,
++                                   [](uint64_t s, const TraceRecord& r) { return s < r.seq; });
++        for (; it != m_records.end() && out.size() < max; ++it) out.push_back(*it);
++        last_seq = m_seq;
++        dropped = m_dropped;
++        points = m_points;
++    }
++
++    void status(size_t& count, uint64_t& last_seq, uint64_t& dropped, std::vector<std::string>& points)
++    {
++        std::lock_guard<std::mutex> l(m_mu);
++        count = m_records.size();
++        last_seq = m_seq;
++        dropped = m_dropped;
++        points = m_points;
++    }
++
++    static const size_t CAPACITY = 100000;
++
++private:
++    std::mutex m_mu;
++    std::deque<TraceRecord> m_records;
++    std::vector<std::string> m_points;
++    std::vector<std::string> m_kinds;
++    std::deque<std::atomic<bool>> m_on; // a deque: elements never move
++    std::vector<std::function<void(bool)>> m_changed;
++    uint64_t m_seq = 0;
++    uint64_t m_dropped = 0;
++    std::atomic<bool> m_enabled{ true };
++    std::vector<Breakpoint> m_breakpoints;
++    std::atomic<bool> m_has_breakpoints{ false };
++    Hit m_hit;
++    std::function<void()> m_on_break;
++};
++
++#endif
+diff --git a/systemc-components/probes/src/probes.cc b/systemc-components/probes/src/probes.cc
+new file mode 100644
+index 00000000..bbfa5e11
+--- /dev/null
++++ b/systemc-components/probes/src/probes.cc
+@@ -0,0 +1,225 @@
++/*
++ * vp_probes: tracer (bus accesses) and signal_tracer (signal changes),
++ * the probes VP Studio puts in a platform. See probes.h.
++ */
++#include "probes.h"
++
++#include <cci_configuration>
++#include <module_factory_registery.h>
++#include <scp/report.h>
++#include <tlm_utils/simple_initiator_socket.h>
++#include <tlm_utils/simple_target_socket.h>
++#include <tlm_sockets_buswidth.h>
++#include <ports/initiator-signal-socket.h>
++#include <ports/target-signal-socket.h>
++#if __has_include(<tlm-extensions/qemu-mr-hint.h>)
++#include <tlm-extensions/qemu-mr-hint.h>
++#define PROBES_HAVE_QEMU_HINT 1
++#endif
++
++TraceStore& TraceStore::get()
++{
++    static TraceStore s;
++    return s;
++}
++
++bool& TraceStore::agent_access()
++{
++    static thread_local bool on = false;
++    return on;
++}
++
++InitiatorNames& InitiatorNames::get()
++{
++    static InitiatorNames s;
++    return s;
++}
++
++/**
++ * tracer: a pass-through placed between a bus and one target socket of a
++ * device. The bus maps it at the device's address (its target_socket has the
++ * address and size); it forwards every call to the device unchanged and
++ * records each b_transport in the TraceStore. Debug transport and DMI pass
++ * through without being recorded.
++ */
++class tracer : public sc_core::sc_module
++{
++    SCP_LOGGER();
++
++public:
++    tlm_utils::simple_target_socket<tracer, DEFAULT_TLM_BUSWIDTH> target_socket;
++    tlm_utils::simple_initiator_socket<tracer, DEFAULT_TLM_BUSWIDTH> initiator_socket;
++    cci::cci_param<std::string> p_label;
++    cci::cci_param<bool> p_allow_dmi;
++    cci::cci_param<bool> p_record;
++    cci::cci_param<std::string> p_router;
++
++    explicit tracer(const sc_core::sc_module_name& n)
++        : sc_core::sc_module(n)
++        , target_socket("target_socket")
++        , initiator_socket("initiator_socket")
++        , p_label("label", "", "Name shown for this trace point (module.port of the device)")
++        , p_allow_dmi("allow_dmi", false,
++                      "Let initiators use DMI. Accesses through DMI bypass the tracer, so only allow it for memories "
++                      "whose accesses you do not need to see. While the probe records, DMI is refused anyway.")
++        , p_record("record", true, "Record from the start; trace.setPoints turns it on and off while running")
++        , p_router("router", "", "The router in front of this tracer, as the platform names it (to tell who issued an access); empty: the only router")
++    {
++        m_router = InitiatorNames::get().router_id(p_router.get_value());
++        target_socket.register_b_transport(this, &tracer::b_transport);
++        target_socket.register_transport_dbg(this, &tracer::transport_dbg);
++        target_socket.register_get_direct_mem_ptr(this, &tracer::get_direct_mem_ptr);
++        initiator_socket.register_invalidate_direct_mem_ptr(this, &tracer::invalidate_direct_mem_ptr);
++        auto broker = cci::cci_get_broker();
++        const std::string a = std::string(name()) + ".target_socket.address";
++        if (broker.has_preset_value(a) && broker.get_preset_cci_value(a).is_number())
++            m_base = broker.get_preset_cci_value(a).get_uint64();
++        m_relative = true;
++        const std::string r = std::string(name()) + ".target_socket.relative_addresses";
++        if (broker.has_preset_value(r) && broker.get_preset_cci_value(r).is_bool())
++            m_relative = broker.get_preset_cci_value(r).get_bool();
++        const std::string sz = std::string(name()) + ".target_socket.size";
++        if (broker.has_preset_value(sz) && broker.get_preset_cci_value(sz).is_number())
++            m_size = broker.get_preset_cci_value(sz).get_uint64();
++        m_allow_dmi = p_allow_dmi.get_value();
++        m_point = TraceStore::get().add_point(p_label.get_value().empty() ? std::string(name()) : p_label.get_value(),
++                                              m_allow_dmi ? "memory" : "bus", p_record.get_value(),
++                                              [this](bool on) { recording_changed(on); });
++    }
++
++private:
++    uint64_t m_base = 0;
++    uint64_t m_size = 0;
++    bool m_relative = true;
++    bool m_allow_dmi = false;
++    uint32_t m_point = 0;
++    uint16_t m_router = 0;
++
++    /** DMI only for a memory whose probe is not recording. */
++    bool dmi_ok() const { return m_allow_dmi && !TraceStore::get().point_on(m_point); }
++
++    /**
++     * A memory probe that starts recording takes back the DMI pointers handed
++     * out through it, so CPUs come back through b_transport. The router adds
++     * the probe's address to a relative range. QEMU CPUs drop their pointers
++     * asynchronously, at their next safe point.
++     */
++    void recording_changed(bool on)
++    {
++        if (!on || !m_allow_dmi) return;
++        if (m_relative)
++            target_socket->invalidate_direct_mem_ptr(0, m_size ? m_size - 1 : ~sc_dt::uint64(0) - m_base);
++        else
++            target_socket->invalidate_direct_mem_ptr(m_base, m_size ? m_base + m_size - 1 : ~sc_dt::uint64(0));
++    }
++
++    void b_transport(tlm::tlm_generic_payload& trans, sc_core::sc_time& delay)
++    {
++        initiator_socket->b_transport(trans, delay);
++        auto& store = TraceStore::get();
++        if (!dmi_ok()) {
++            // Keep initiators from going around the trace: no DMI, and no
++            // QEMU memory-region hint (a QEMU CPU uses it to map a QEMU
++            // device straight into its address space after the first access).
++            trans.set_dmi_allowed(false);
++#ifdef PROBES_HAVE_QEMU_HINT
++            QemuMrHintTlmExtension* hint = nullptr;
++            trans.get_extension(hint);
++            if (hint) trans.release_extension(hint);
++#endif
++        }
++        if (!store.wants(m_point)) return;
++        TraceRecord r{};
++        r.time_s = (sc_core::sc_time_stamp() + delay).to_seconds();
++        r.point = m_point;
++        r.write = trans.get_command() == tlm::TLM_WRITE_COMMAND;
++        r.address = trans.get_address() + (m_relative ? m_base : 0);
++        r.length = trans.get_data_length();
++        const unsigned char* p = trans.get_data_ptr();
++        if (p) std::memcpy(r.data, p, std::min<size_t>(sizeof r.data, r.length));
++        r.status = int(trans.get_response_status());
++        r.router = m_router;
++        gs::PathIDExtension* path = nullptr;
++        trans.get_extension(path);
++        if (path) {
++            // Outermost first; deeper paths than 4 routers are cut at the inner end, which resolve() rejects.
++            r.npath = uint8_t(std::min<size_t>(path->size(), sizeof r.path / sizeof r.path[0]));
++            for (size_t i = 0; i < r.npath; i++) r.path[i] = int16_t((*path)[i]);
++            if (path->size() > r.npath) r.npath = 0;
++        }
++        store.record(r);
++    }
++
++    unsigned int transport_dbg(tlm::tlm_generic_payload& trans) { return initiator_socket->transport_dbg(trans); }
++
++    bool get_direct_mem_ptr(tlm::tlm_generic_payload& trans, tlm::tlm_dmi& dmi)
++    {
++        if (!dmi_ok()) return false;
++        return initiator_socket->get_direct_mem_ptr(trans, dmi);
++    }
++
++    void invalidate_direct_mem_ptr(sc_dt::uint64 start, sc_dt::uint64 end)
++    {
++        target_socket->invalidate_direct_mem_ptr(start, end);
++    }
++};
++
++/**
++ * signal_tracer: placed in a signal connection (an interrupt line, say):
++ * the source's output binds to "in", "out" binds to the destination's input.
++ * Every write is passed on unchanged; each change of level is recorded in the
++ * TraceStore, with the simulated time of the write, as a record with
++ * signal = true. Writes may come from a vCPU thread, like bus accesses.
++ */
++class signal_tracer : public sc_core::sc_module
++{
++public:
++    TargetSignalSocket<bool> in;
++    InitiatorSignalSocket<bool> out;
++    cci::cci_param<std::string> p_label;
++    cci::cci_param<bool> p_record;
++
++    explicit signal_tracer(const sc_core::sc_module_name& n)
++        : sc_core::sc_module(n)
++        , in("in")
++        , out("out")
++        , p_label("label", "", "Name shown for this trace point (the source of the signal)")
++        , p_record("record", true, "Record from the start; trace.setPoints turns it on and off while running")
++    {
++        m_point = TraceStore::get().add_point(p_label.get_value().empty() ? std::string(name()) : p_label.get_value(),
++                                              "signal", p_record.get_value());
++        in.register_value_changed_cb([this](const bool& v) {
++            // The level is followed even while not recording, so the first
++            // change recorded after turning the probe on is a real change.
++            const bool changed = !m_seen || v != m_level;
++            m_seen = true;
++            m_level = v;
++            if (changed && TraceStore::get().wants(m_point)) {
++                TraceRecord r{};
++                r.time_s = sc_core::sc_time_stamp().to_seconds();
++                r.point = m_point;
++                r.write = v;
++                r.length = 1;
++                r.data[0] = v ? 1 : 0;
++                r.status = int(tlm::TLM_OK_RESPONSE);
++                r.signal = true;
++                TraceStore::get().record(r);
++            }
++            if (out.size()) out->write(v);
++        });
++    }
++
++private:
++    uint32_t m_point = 0;
++    bool m_seen = false;
++    bool m_level = false;
++};
++
++extern "C" void module_register();
++void module_register()
++{
++    // Each factory is registered once, even if QBox calls this again.
++    auto broker = cci::cci_get_broker();
++    if (!broker.get_param_handle(CCI_GS_MF_NAME "tracer").is_valid()) GSC_MODULE_REGISTER_C(tracer);
++    if (!broker.get_param_handle(CCI_GS_MF_NAME "signal_tracer").is_valid()) GSC_MODULE_REGISTER_C(signal_tracer);
++}

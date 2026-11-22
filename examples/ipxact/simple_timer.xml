@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example IP-XACT 1685-2014 component for "VP Studio: Import IP-XACT…". -->
+<ipxact:component xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2014"
+                  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ipxact:vendor>example.com</ipxact:vendor>
+  <ipxact:library>peripherals</ipxact:library>
+  <ipxact:name>simple_timer</ipxact:name>
+  <ipxact:version>1.0</ipxact:version>
+  <ipxact:memoryMaps>
+    <ipxact:memoryMap>
+      <ipxact:name>regs</ipxact:name>
+      <ipxact:addressBlock>
+        <ipxact:name>timer</ipxact:name>
+        <ipxact:description>Two 32-bit down counters with interrupts</ipxact:description>
+        <ipxact:baseAddress>'h0</ipxact:baseAddress>
+        <ipxact:range>REG_SPACE</ipxact:range>
+        <ipxact:width>32</ipxact:width>
+        <ipxact:usage>register</ipxact:usage>
+        <ipxact:register>
+          <ipxact:name>CTRL</ipxact:name>
+          <ipxact:description>Control</ipxact:description>
+          <ipxact:addressOffset>'h0</ipxact:addressOffset>
+          <ipxact:size>32</ipxact:size>
+          <ipxact:access>read-write</ipxact:access>
+          <ipxact:field>
+            <ipxact:name>ENABLE</ipxact:name>
+            <ipxact:bitOffset>0</ipxact:bitOffset>
+            <ipxact:resets><ipxact:reset><ipxact:value>0</ipxact:value></ipxact:reset></ipxact:resets>
+            <ipxact:bitWidth>1</ipxact:bitWidth>
+          </ipxact:field>
+          <ipxact:field>
+            <ipxact:name>PRESCALE</ipxact:name>
+            <ipxact:description>Clock divider = 2^PRESCALE</ipxact:description>
+            <ipxact:bitOffset>4</ipxact:bitOffset>
+            <ipxact:resets><ipxact:reset><ipxact:value>'h3</ipxact:value></ipxact:reset></ipxact:resets>
+            <ipxact:bitWidth>4</ipxact:bitWidth>
+          </ipxact:field>
+        </ipxact:register>
+        <ipxact:register>
+          <ipxact:name>STATUS</ipxact:name>
+          <ipxact:description>Interrupt status &amp; flags</ipxact:description>
+          <ipxact:addressOffset>'h4</ipxact:addressOffset>
+          <ipxact:size>32</ipxact:size>
+          <ipxact:field>
+            <ipxact:name>IRQ</ipxact:name>
+            <ipxact:bitOffset>0</ipxact:bitOffset>
+            <ipxact:bitWidth>NUM_TIMERS</ipxact:bitWidth>
+            <ipxact:access>read-write</ipxact:access>
+            <ipxact:modifiedWriteValue>oneToClear</ipxact:modifiedWriteValue>
+          </ipxact:field>
+        </ipxact:register>
+        <ipxact:registerFile>
+          <ipxact:name>CH</ipxact:name>
+          <ipxact:dim>NUM_TIMERS</ipxact:dim>
+          <ipxact:addressOffset>'h10</ipxact:addressOffset>
+          <ipxact:range>'h10</ipxact:range>
+          <ipxact:register>
+            <ipxact:name>LOAD</ipxact:name>
+            <ipxact:addressOffset>'h0</ipxact:addressOffset>
+            <ipxact:size>32</ipxact:size>
+            <ipxact:access>read-write</ipxact:access>
+          </ipxact:register>
+          <ipxact:register>
+            <ipxact:name>VALUE</ipxact:name>
+            <ipxact:addressOffset>'h4</ipxact:addressOffset>
+            <ipxact:size>32</ipxact:size>
+            <ipxact:volatile>true</ipxact:volatile>
+            <ipxact:access>read-only</ipxact:access>
+            <ipxact:field>
+              <ipxact:name>COUNT</ipxact:name>
+              <ipxact:bitOffset>0</ipxact:bitOffset>
+              <ipxact:bitWidth>32</ipxact:bitWidth>
+              <ipxact:resets><ipxact:reset><ipxact:value>32'hFFFF_FFFF</ipxact:value></ipxact:reset></ipxact:resets>
+            </ipxact:field>
+          </ipxact:register>
+        </ipxact:registerFile>
+        <ipxact:register>
+          <ipxact:name>ID</ipxact:name>
+          <ipxact:addressOffset>REG_SPACE - 4</ipxact:addressOffset>
+          <ipxact:size>32</ipxact:size>
+          <ipxact:access>read-only</ipxact:access>
+          <ipxact:field>
+            <ipxact:name>ID</ipxact:name>
+            <ipxact:bitOffset>0</ipxact:bitOffset>
+            <ipxact:bitWidth>32</ipxact:bitWidth>
+            <ipxact:resets><ipxact:reset><ipxact:value>'h0001_0002</ipxact:value></ipxact:reset></ipxact:resets>
+          </ipxact:field>
+        </ipxact:register>
+      </ipxact:addressBlock>
+    </ipxact:memoryMap>
+  </ipxact:memoryMaps>
+  <ipxact:parameters>
+    <ipxact:parameter parameterId="NUM_TIMERS" resolve="user">
+      <ipxact:name>NUM_TIMERS</ipxact:name>
+      <ipxact:value>2</ipxact:value>
+    </ipxact:parameter>
+    <ipxact:parameter parameterId="REG_SPACE">
+      <ipxact:name>REG_SPACE</ipxact:name>
+      <ipxact:value>'h40 * 4 * 16</ipxact:value>
+    </ipxact:parameter>
+  </ipxact:parameters>
+</ipxact:component>

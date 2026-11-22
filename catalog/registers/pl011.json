@@ -1,0 +1,60 @@
+{
+  "registersVersion": 1,
+  "title": "Arm PrimeCell UART (PL011)",
+  "types": ["Pl011", "qemu_pl011"],
+  "port": "target_socket",
+  "registers": [
+    { "name": "UARTDR", "offset": "0x000", "access": "rw", "readSideEffect": true,
+      "description": "Data. Reading takes the next received character out of the FIFO; writing sends a character.",
+      "fields": [
+        { "name": "DATA", "bits": "7:0" }, { "name": "FE", "bits": "8", "description": "Framing error" },
+        { "name": "PE", "bits": "9", "description": "Parity error" }, { "name": "BE", "bits": "10", "description": "Break error" },
+        { "name": "OE", "bits": "11", "description": "Overrun error" } ] },
+    { "name": "UARTRSR_ECR", "offset": "0x004", "access": "rw", "description": "Receive status; a write clears the errors",
+      "fields": [ { "name": "FE", "bits": "0" }, { "name": "PE", "bits": "1" }, { "name": "BE", "bits": "2" }, { "name": "OE", "bits": "3" } ] },
+    { "name": "UARTFR", "offset": "0x018", "access": "ro", "description": "Flags",
+      "fields": [
+        { "name": "CTS", "bits": "0" }, { "name": "DSR", "bits": "1" }, { "name": "DCD", "bits": "2" },
+        { "name": "BUSY", "bits": "3", "description": "Transmitting" }, { "name": "RXFE", "bits": "4", "description": "Receive FIFO empty" },
+        { "name": "TXFF", "bits": "5", "description": "Transmit FIFO full" }, { "name": "RXFF", "bits": "6", "description": "Receive FIFO full" },
+        { "name": "TXFE", "bits": "7", "description": "Transmit FIFO empty" }, { "name": "RI", "bits": "8" } ] },
+    { "name": "UARTILPR", "offset": "0x020", "access": "rw", "description": "IrDA low-power counter",
+      "fields": [ { "name": "ILPDVSR", "bits": "7:0" } ] },
+    { "name": "UARTIBRD", "offset": "0x024", "access": "rw", "description": "Integer baud rate divisor",
+      "fields": [ { "name": "BAUD_DIVINT", "bits": "15:0" } ] },
+    { "name": "UARTFBRD", "offset": "0x028", "access": "rw", "description": "Fractional baud rate divisor",
+      "fields": [ { "name": "BAUD_DIVFRAC", "bits": "5:0" } ] },
+    { "name": "UARTLCR_H", "offset": "0x02c", "access": "rw", "description": "Line control",
+      "fields": [
+        { "name": "BRK", "bits": "0", "description": "Send break" }, { "name": "PEN", "bits": "1", "description": "Parity enable" },
+        { "name": "EPS", "bits": "2", "description": "Even parity" }, { "name": "STP2", "bits": "3", "description": "Two stop bits" },
+        { "name": "FEN", "bits": "4", "description": "FIFOs enabled" }, { "name": "WLEN", "bits": "6:5", "description": "Word length: 0 = 5 bits … 3 = 8 bits" },
+        { "name": "SPS", "bits": "7", "description": "Stick parity" } ] },
+    { "name": "UARTCR", "offset": "0x030", "access": "rw", "description": "Control",
+      "fields": [
+        { "name": "UARTEN", "bits": "0", "description": "UART enabled" }, { "name": "SIREN", "bits": "1" }, { "name": "SIRLP", "bits": "2" },
+        { "name": "LBE", "bits": "7", "description": "Loopback" }, { "name": "TXE", "bits": "8", "description": "Transmit enabled" },
+        { "name": "RXE", "bits": "9", "description": "Receive enabled" }, { "name": "DTR", "bits": "10" }, { "name": "RTS", "bits": "11" },
+        { "name": "OUT1", "bits": "12" }, { "name": "OUT2", "bits": "13" }, { "name": "RTSEN", "bits": "14" }, { "name": "CTSEN", "bits": "15" } ] },
+    { "name": "UARTIFLS", "offset": "0x034", "access": "rw", "description": "Interrupt FIFO level select",
+      "fields": [ { "name": "TXIFLSEL", "bits": "2:0" }, { "name": "RXIFLSEL", "bits": "5:3" } ] },
+    { "name": "UARTIMSC", "offset": "0x038", "access": "rw", "description": "Interrupt mask set/clear (1 = enabled)", "fieldsLike": "interrupts" },
+    { "name": "UARTRIS", "offset": "0x03c", "access": "ro", "description": "Raw interrupt status", "fieldsLike": "interrupts" },
+    { "name": "UARTMIS", "offset": "0x040", "access": "ro", "description": "Masked interrupt status", "fieldsLike": "interrupts" },
+    { "name": "UARTICR", "offset": "0x044", "access": "wo", "description": "Interrupt clear (write 1 to clear)", "fieldsLike": "interrupts" },
+    { "name": "UARTDMACR", "offset": "0x048", "access": "rw", "description": "DMA control",
+      "fields": [ { "name": "RXDMAE", "bits": "0" }, { "name": "TXDMAE", "bits": "1" }, { "name": "DMAONERR", "bits": "2" } ] },
+    { "name": "UARTPeriphID", "offset": "0xfe0", "count": 4, "stride": 4, "access": "ro", "description": "Peripheral identification (0x11, 0x10, 0x14 or 0x34, 0x00)",
+      "fields": [ { "name": "ID", "bits": "7:0" } ] },
+    { "name": "UARTPCellID", "offset": "0xff0", "count": 4, "stride": 4, "access": "ro", "description": "PrimeCell identification (0x0d, 0xf0, 0x05, 0xb1)",
+      "fields": [ { "name": "ID", "bits": "7:0" } ] }
+  ],
+  "fieldSets": {
+    "interrupts": [
+      { "name": "RIM", "bits": "0" }, { "name": "CTSM", "bits": "1" }, { "name": "DCDM", "bits": "2" }, { "name": "DSRM", "bits": "3" },
+      { "name": "RX", "bits": "4", "description": "Receive" }, { "name": "TX", "bits": "5", "description": "Transmit" },
+      { "name": "RT", "bits": "6", "description": "Receive timeout" }, { "name": "FE", "bits": "7" }, { "name": "PE", "bits": "8" },
+      { "name": "BE", "bits": "9" }, { "name": "OE", "bits": "10" }
+    ]
+  }
+}

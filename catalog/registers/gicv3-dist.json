@@ -1,0 +1,28 @@
+{
+  "registersVersion": 1,
+  "title": "Arm GICv3 distributor (GICD), the main registers",
+  "types": ["arm_gicv3"],
+  "port": "dist_iface",
+  "registers": [
+    { "name": "GICD_CTLR", "offset": "0x0000", "access": "rw", "description": "Distributor control (as seen by Non-secure accesses when security is enabled)",
+      "fields": [
+        { "name": "EnableGrp0", "bits": "0" }, { "name": "EnableGrp1NS", "bits": "1" }, { "name": "EnableGrp1S", "bits": "2" },
+        { "name": "ARE_S", "bits": "4", "description": "Affinity routing, Secure" }, { "name": "ARE_NS", "bits": "5", "description": "Affinity routing, Non-secure" },
+        { "name": "DS", "bits": "6", "description": "Security disabled" }, { "name": "E1NWF", "bits": "7" },
+        { "name": "RWP", "bits": "31", "description": "Register write pending" } ] },
+    { "name": "GICD_TYPER", "offset": "0x0004", "access": "ro", "description": "Interrupt controller type",
+      "fields": [
+        { "name": "ITLinesNumber", "bits": "4:0", "description": "SPIs supported: 32 × (N + 1) interrupt IDs" },
+        { "name": "CPUNumber", "bits": "7:5" }, { "name": "SecurityExtn", "bits": "10" }, { "name": "MBIS", "bits": "16" },
+        { "name": "LPIS", "bits": "17" }, { "name": "DVIS", "bits": "18" }, { "name": "IDbits", "bits": "23:19", "description": "Interrupt ID bits minus 1" },
+        { "name": "A3V", "bits": "24" }, { "name": "No1N", "bits": "25" }, { "name": "RSS", "bits": "26" } ] },
+    { "name": "GICD_IIDR", "offset": "0x0008", "access": "ro", "description": "Implementer identification",
+      "fields": [ { "name": "Implementer", "bits": "11:0" }, { "name": "Revision", "bits": "15:12" }, { "name": "Variant", "bits": "19:16" }, { "name": "ProductID", "bits": "31:24" } ] },
+    { "name": "GICD_IGROUPR", "offset": "0x0080", "count": 32, "stride": 4, "access": "rw", "description": "Interrupt group, one bit per interrupt ID (32 × n … 32 × n + 31)" },
+    { "name": "GICD_ISENABLER", "offset": "0x0100", "count": 32, "stride": 4, "access": "rw", "description": "Interrupt set-enable, one bit per interrupt ID (32 × n … 32 × n + 31); reads 1 for enabled" },
+    { "name": "GICD_ISPENDR", "offset": "0x0200", "count": 32, "stride": 4, "access": "rw", "description": "Interrupt set-pending, one bit per interrupt ID; reads 1 for pending" },
+    { "name": "GICD_ISACTIVER", "offset": "0x0300", "count": 32, "stride": 4, "access": "rw", "description": "Interrupt set-active, one bit per interrupt ID; reads 1 for active" },
+    { "name": "GICD_PIDR2", "offset": "0xffe8", "access": "ro", "description": "Peripheral ID 2",
+      "fields": [ { "name": "ArchRev", "bits": "7:4", "description": "3 for GICv3, 4 for GICv4" } ] }
+  ]
+}

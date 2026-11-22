@@ -1,0 +1,6 @@
+*.vsix
+tools/sim-agent/vp_sim_agent.so
+tools/sim-agent/vp_sim_agent.json
+tools/qbox-catalog/qbox-catalog
+test
+examples

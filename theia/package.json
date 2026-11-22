@@ -1,0 +1,23 @@
+{
+  "private": true,
+  "name": "vp-studio-theia",
+  "version": "0.2.0",
+  "description": "VP Studio as a standalone IDE, built with Eclipse Theia.",
+  "workspaces": [
+    "vp-studio-menu",
+    "electron-app",
+    "browser-app"
+  ],
+  "theiaPluginsDir": "plugins",
+  "theiaPlugins": {
+    "vscode.json": "https://open-vsx.org/api/vscode/json/1.95.3/file/vscode.json-1.95.3.vsix",
+    "vscode.json-language-features": "https://open-vsx.org/api/vscode/json-language-features/1.95.3/file/vscode.json-language-features-1.95.3.vsix",
+    "eclipse-cdt.cdt-gdb-vscode": "https://open-vsx.org/api/eclipse-cdt/cdt-gdb-vscode/3.0.0/file/eclipse-cdt.cdt-gdb-vscode-3.0.0.vsix"
+  },
+  "devDependencies": {
+    "@theia/cli": "1.74.3"
+  },
+  "scripts": {
+    "download:plugins": "theia download:plugins --rate-limit=15 --parallel=false"
+  }
+}

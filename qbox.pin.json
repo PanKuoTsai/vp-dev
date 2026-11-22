@@ -1,0 +1,41 @@
+{
+  "pinVersion": 1,
+  "qbox": {
+    "repository": "https://github.com/qualcomm/qbox.git",
+    "commit": "adfde7985eefe806ebd40b43f2516a5ac5cb5e51",
+    "date": "2026-11-13",
+    "patches": [
+      "patches/qbox/0001-mttcg-register-woken-cpu.patch",
+      "patches/qbox/0002-vp-studio-probes-debug-dap.patch",
+      "patches/qbox/0003-vp-studio-perf-models.patch"
+    ]
+  },
+  "libqemu": {
+    "tag": "libqemu-v11.0-v0.17",
+    "note": "fetched by QBox's CMake into build/_deps/libqemu-src; the patches are applied there after configure",
+    "patches": [
+      "patches/libqemu/0001-register-device-vmstate.patch"
+    ]
+  },
+  "build": {
+    "preset": "gcc",
+    "libqemuTargets": [
+      "aarch64",
+      "hexagon",
+      "xtensa",
+      "riscv64",
+      "riscv32"
+    ]
+  },
+  "image": {
+    "name": "vp-studio-qbox",
+    "base": "ubuntu:24.04"
+  },
+  "tested": [
+    {
+      "platform": "examples/ubuntu-aarch64.platform.json",
+      "result": "boots to login:",
+      "date": "2026-11-14"
+    }
+  ]
+}

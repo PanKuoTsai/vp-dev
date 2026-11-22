@@ -1,0 +1,47 @@
+// Boot test of a VP Studio platform on a Jenkins agent labelled "qbox".
+// The agent needs a QBox build, the sim agent built for it, Node.js 18 or
+// later and Python 3 (see INSTALL.md). GUEST_PASSWORD comes from a Jenkins
+// credential.
+pipeline {
+    agent { label 'qbox' }
+    options { timeout(time: 30, unit: 'MINUTES') }
+    environment {
+        QBOX = '/opt/qbox'
+        VP_STUDIO = '/opt/vp-studio'
+        VP_SIM_AGENT = '/opt/vp-studio-build/sim-agent/sim_agent.so'
+        PLATFORM = "${QBOX}/platforms/ubuntu/ubuntu-aarch64.platform.json"
+        GUEST_PASSWORD = credentials('qbox-guest-password')
+    }
+    stages {
+        stage('Boot') {
+            steps {
+                sh '''
+                    sh "$VP_STUDIO/bin/vp-run" --qbox "$QBOX" --snapshot --timeout 900 \
+                        --log boot.log --junit boot.xml \
+                        --expect 'login:' --send root \
+                        --expect 'Password:' --send-env GUEST_PASSWORD \
+                        --expect '# $' --send poweroff \
+                        --wait-exit \
+                        "$PLATFORM"
+                '''
+            }
+        }
+        stage('Agent checks') {
+            steps {
+                sh '''
+                    sh "$VP_STUDIO/bin/vp-run" --qbox "$QBOX" --snapshot --timeout 900 --quiet \
+                        --log agent.log --junit agent.xml \
+                        --expect 'login:' \
+                        --exec "python3 $VP_STUDIO/examples/ci/test_platform.py" \
+                        "$PLATFORM"
+                '''
+            }
+        }
+    }
+    post {
+        always {
+            junit allowEmptyResults: true, testResults: '*.xml'
+            archiveArtifacts artifacts: '*.log', allowEmptyArchive: true
+        }
+    }
+}

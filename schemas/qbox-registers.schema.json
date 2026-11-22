@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vp-studio/qbox-registers.schema.json",
+  "title": "VP Studio register description",
+  "description": "Registers of a module type's bus port, for the Peripheral Registers view (VP Studio: Import IP-XACT… writes these).",
+  "type": "object",
+  "required": ["registersVersion", "types", "port", "registers"],
+  "definitions": {
+    "ident": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "num": { "oneOf": [{ "type": "string", "pattern": "^(0x[0-9A-Fa-f]+|\\d+)$" }, { "type": "integer", "minimum": 0 }] },
+    "field": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "bits"],
+      "properties": {
+        "name": { "$ref": "#/definitions/ident" },
+        "bits": { "type": "string", "pattern": "^\\s*\\d+\\s*(:\\s*\\d+\\s*)?$", "description": "\"msb:lsb\" or one bit, e.g. \"7:4\"." },
+        "description": { "type": "string" }
+      }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "registersVersion": { "const": 1 },
+    "title": { "type": "string" },
+    "types": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Module types (platform \"type\") these registers belong to." },
+    "port": { "type": "string", "description": "The bus target port the registers are on, e.g. target_socket." },
+    "fieldSets": { "type": "object", "additionalProperties": { "type": "array", "items": { "$ref": "#/definitions/field" } } },
+    "registers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "offset"],
+        "properties": {
+          "name": { "$ref": "#/definitions/ident" },
+          "offset": { "$ref": "#/definitions/num", "description": "Byte offset from the port's address." },
+          "size": { "enum": [1, 2, 4, 8], "description": "Bytes. Default 4." },
+          "access": { "enum": ["rw", "ro", "wo", "w1c"], "description": "Default rw." },
+          "description": { "type": "string" },
+          "readSideEffect": { "type": "boolean", "description": "Reading changes the device (a FIFO pops): the view does not read it by itself." },
+          "count": { "type": "integer", "minimum": 1, "maximum": 1024, "description": "An array: name0, name1, …" },
+          "stride": { "$ref": "#/definitions/num", "description": "Bytes between array elements. Default: size." },
+          "fieldsLike": { "type": "string", "description": "Use the fields of fieldSets[fieldsLike]." },
+          "fields": { "type": "array", "items": { "$ref": "#/definitions/field" } }
+        }
+      }
+    }
+  }
+}

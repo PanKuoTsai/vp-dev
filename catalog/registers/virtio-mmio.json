@@ -1,0 +1,31 @@
+{
+  "registersVersion": 1,
+  "title": "Virtio over MMIO (version 2 layout; QEMU reports version 1 for legacy devices, where some offsets differ)",
+  "types": ["virtio_mmio_blk", "virtio_mmio_net", "virtio_mmio_gpugl", "virtio_mmio_sound", "virtio_mmio"],
+  "port": "mem",
+  "registers": [
+    { "name": "MagicValue", "offset": "0x000", "access": "ro", "description": "0x74726976 (\"virt\")" },
+    { "name": "Version", "offset": "0x004", "access": "ro", "description": "1: legacy, 2: virtio 1.0 and later" },
+    { "name": "DeviceID", "offset": "0x008", "access": "ro", "description": "1 network, 2 block, 16 GPU, 25 sound" },
+    { "name": "VendorID", "offset": "0x00c", "access": "ro" },
+    { "name": "DeviceFeatures", "offset": "0x010", "access": "ro", "description": "32 feature bits, chosen by DeviceFeaturesSel" },
+    { "name": "DeviceFeaturesSel", "offset": "0x014", "access": "wo" },
+    { "name": "DriverFeatures", "offset": "0x020", "access": "wo" },
+    { "name": "DriverFeaturesSel", "offset": "0x024", "access": "wo" },
+    { "name": "GuestPageSize", "offset": "0x028", "access": "wo", "description": "Version 1 only" },
+    { "name": "QueueSel", "offset": "0x030", "access": "wo" },
+    { "name": "QueueNumMax", "offset": "0x034", "access": "ro", "description": "Size limit of the queue chosen by QueueSel" },
+    { "name": "QueueNum", "offset": "0x038", "access": "wo" },
+    { "name": "QueuePFN", "offset": "0x040", "access": "rw", "description": "Version 1 only: page number of the queue chosen by QueueSel" },
+    { "name": "QueueReady", "offset": "0x044", "access": "rw", "description": "Queue chosen by QueueSel is ready (version 2)" },
+    { "name": "QueueNotify", "offset": "0x050", "access": "wo" },
+    { "name": "InterruptStatus", "offset": "0x060", "access": "ro",
+      "fields": [ { "name": "USED_BUFFER", "bits": "0" }, { "name": "CONFIG_CHANGE", "bits": "1" } ] },
+    { "name": "InterruptACK", "offset": "0x064", "access": "wo" },
+    { "name": "Status", "offset": "0x070", "access": "rw", "description": "Device status set by the driver",
+      "fields": [
+        { "name": "ACKNOWLEDGE", "bits": "0" }, { "name": "DRIVER", "bits": "1" }, { "name": "DRIVER_OK", "bits": "2" },
+        { "name": "FEATURES_OK", "bits": "3" }, { "name": "DEVICE_NEEDS_RESET", "bits": "6" }, { "name": "FAILED", "bits": "7" } ] },
+    { "name": "ConfigGeneration", "offset": "0x0fc", "access": "ro" }
+  ]
+}

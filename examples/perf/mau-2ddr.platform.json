@@ -1,0 +1,182 @@
+{
+  "$schema": "../../schemas/qbox-platform.schema.json",
+  "schemaVersion": "0.2",
+  "name": "mau-2ddr",
+  "description": "Two DDRs, each behind its own MAU (memory access unit). MAU0 (mau0 + ddr0) serves 0x0000_0000-0x7FFF_FFFF, MAU1 (mau1 + ddr1) serves 0x8000_0000-0xDFFF_FFFF. A MAU is an at_bus (arbitration between the masters, its own request and response channels, QoS per master in masters) in front of a dram_ctrl (DDR command scheduling, banks, timing; qos: by the MAU's priority). On MAU0 the CPU has the higher priority (latency first) and the display 6000 MB/s reserved, so it keeps its bandwidth when the CPU is busy; on MAU1 the DMA has 6000 MB/s reserved. The masters are placeholders: a master that uses both DDRs is two traffic_gen, one per MAU.",
+  "platform": {
+    "moduletype": "Container",
+    "params": {
+      "quantum_ns": 1000
+    }
+  },
+  "modules": {
+    "display": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "Display: reads its frame buffer in DDR0 in order at 6000 MB/s.",
+      "params": {
+        "address": "0x0",
+        "size": "0x2000000",
+        "pattern": "sequential",
+        "burst_bytes": 64,
+        "rate_mbps": 6000,
+        "max_outstanding": 16,
+        "count": 0,
+        "duration_ns": 200000,
+        "qos": 2
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "mau0.target_socket"
+        }
+      }
+    },
+    "cpu_ddr0": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "CPU, the part of its misses that fall in DDR0: random 64-byte accesses, 70% reads.",
+      "params": {
+        "address": "0x40000000",
+        "size": "0x40000000",
+        "pattern": "random",
+        "read_ratio": 0.7,
+        "burst_bytes": 64,
+        "max_outstanding": 4,
+        "count": 0,
+        "duration_ns": 200000,
+        "seed": 3,
+        "qos": 1,
+        "label": "cpu@ddr0"
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "mau0.target_socket"
+        }
+      }
+    },
+    "cpu_ddr1": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "CPU, the part of its misses that fall in DDR1.",
+      "params": {
+        "address": "0x80000000",
+        "size": "0x40000000",
+        "pattern": "random",
+        "read_ratio": 0.7,
+        "burst_bytes": 64,
+        "max_outstanding": 4,
+        "count": 0,
+        "duration_ns": 200000,
+        "seed": 4,
+        "qos": 1,
+        "label": "cpu@ddr1"
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "mau1.target_socket"
+        }
+      }
+    },
+    "dma": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "DMA engine: 256-byte writes to DDR1, up to 6000 MB/s.",
+      "params": {
+        "address": "0xC0000000",
+        "size": "0x4000000",
+        "pattern": "sequential",
+        "read_ratio": 0,
+        "burst_bytes": 256,
+        "rate_mbps": 6000,
+        "max_outstanding": 4,
+        "count": 0,
+        "duration_ns": 200000,
+        "seed": 2
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "mau1.target_socket"
+        }
+      }
+    },
+    "mau0": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "description": "MAU0: arbitrates the masters' accesses to DDR0; the CPU goes first (priority 3), the display has 6000 MB/s reserved.",
+      "params": {
+        "clock_mhz": 1000,
+        "data_bytes": 16,
+        "latency_cycles": 2,
+        "arbitration": "priority",
+        "target_queue": 8,
+        "masters": "cpu_ddr0: priority=3; display: min_mbps=6000"
+      }
+    },
+    "mau1": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "description": "MAU1: arbitrates the masters' accesses to DDR1; the DMA has 6000 MB/s reserved.",
+      "params": {
+        "clock_mhz": 1000,
+        "data_bytes": 16,
+        "latency_cycles": 2,
+        "arbitration": "priority",
+        "target_queue": 8,
+        "masters": "dma: min_mbps=6000"
+      }
+    },
+    "ddr0": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "DDR0, DDR4-3200 x64: 0x0000_0000-0x7FFF_FFFF (2 GiB).",
+      "params": {
+        "clock_mhz": 1600,
+        "data_bytes": 8,
+        "banks": 16,
+        "row_bytes": 8192,
+        "tRCD": 22,
+        "tCL": 22,
+        "tRP": 22,
+        "scheduler": "fr_fcfs",
+        "qos": true
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x0",
+          "size": "0x80000000",
+          "bind": "mau0.initiator_socket"
+        }
+      }
+    },
+    "ddr1": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "DDR1, DDR4-3200 x64: 0x8000_0000-0xDFFF_FFFF (1.5 GiB).",
+      "params": {
+        "clock_mhz": 1600,
+        "data_bytes": 8,
+        "banks": 16,
+        "row_bytes": 8192,
+        "tRCD": 22,
+        "tCL": 22,
+        "tRP": 22,
+        "scheduler": "fr_fcfs",
+        "qos": true
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x80000000",
+          "size": "0x60000000",
+          "bind": "mau1.initiator_socket"
+        }
+      }
+    },
+    "stats": {
+      "type": "perf_stats",
+      "dylib": "perf",
+      "params": {
+        "output": "mau-2ddr.perf.json"
+      }
+    }
+  }
+}

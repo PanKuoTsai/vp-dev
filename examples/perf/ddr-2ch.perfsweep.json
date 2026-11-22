@@ -1,0 +1,40 @@
+{
+  "platform": "ddr-2ch.platform.json",
+  "description": "The cpu-outstanding sweep on two channels: the display has channel 0 to itself, the CPU and the DMA share channel 1.",
+  "sweep": [
+    {
+      "param": "ddr1.scheduler",
+      "values": [
+        "fr_fcfs",
+        "fcfs"
+      ]
+    },
+    {
+      "param": "cpu.max_outstanding",
+      "values": [
+        1,
+        2,
+        4,
+        8,
+        16,
+        32
+      ]
+    }
+  ],
+  "metrics": [
+    "initiators.display.bandwidthMBps",
+    "initiators.display.latencyNs.p99",
+    "initiators.cpu.bandwidthMBps",
+    "initiators.cpu.latencyNs.p99",
+    "initiators.dma.bandwidthMBps",
+    "memories.ddr0.dataBusUtilization",
+    "memories.ddr1.dataBusUtilization",
+    "memories.ddr1.rowHitRate"
+  ],
+  "checks": [
+    {
+      "metric": "initiators.display.bandwidthMBps",
+      "min": 5900
+    }
+  ]
+}

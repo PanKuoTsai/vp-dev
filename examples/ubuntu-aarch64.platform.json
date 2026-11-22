@@ -1,0 +1,188 @@
+{
+  "$schema": "../schemas/qbox-platform.schema.json",
+  "schemaVersion": "0.1",
+  "name": "ubuntu-aarch64",
+  "description": "QBox Ubuntu AArch64 reference platform, transcribed from platforms/ubuntu conf.lua.",
+
+  "luaPrelude": ["${TOP}../fw/utils.lua"],
+
+  "variables": [
+    { "name": "INITIAL_DDR_SPACE", "value": "0x80000000", "global": true },
+    { "name": "_KERNEL64_LOAD_ADDR", "value": "${INITIAL_DDR_SPACE}+0x01200000", "global": true },
+    { "name": "_DTB_LOAD_ADDR", "value": "${INITIAL_DDR_SPACE}+0x07600000", "global": true },
+    { "name": "_INITRD_LOAD_ADDR", "value": "${INITIAL_DDR_SPACE}+0x0A800000", "global": true },
+    { "name": "ACCEL", "value": "tcg", "overridable": true, "description": "tcg or kvm" },
+    { "name": "ARM_NUM_CPUS", "value": 8, "global": true },
+    { "name": "IS_SHARED_MEM", "value": false },
+    { "name": "GICD_BASE", "value": "0x17A00000" },
+    { "name": "GICR_OFFSET", "value": "0x60000" },
+    { "name": "UART0", "value": "0x10000000" },
+    { "name": "HOST_PORT_SSH", "value": 2222, "hostPort": true, "description": "Host port forwarded to guest TCP port 22" },
+    { "name": "HOST_PORT_FTP", "value": 2221, "hostPort": true, "description": "Host port forwarded to guest TCP port 21" },
+    { "name": "HOST_PORT_56283", "value": 56283, "hostPort": true, "description": "Host port forwarded to guest TCP port 56283" },
+    { "name": "HOST_PORT_65534", "value": 55534, "hostPort": true, "description": "Host port forwarded to guest TCP port 65534" },
+    { "name": "HOST_PORT_65535", "value": 55535, "hostPort": true, "description": "Host port forwarded to guest TCP port 65535" }
+  ],
+
+  "luaIncludes": ["${TOP}fw/arm64_bootloader.lua"],
+
+  "platform": {
+    "moduletype": "Container",
+    "params": { "quantum_ns": 10000000 }
+  },
+
+  "modules": {
+    "keep_alive_0": {
+      "type": "keep_alive",
+      "description": "Keeps SystemC from ending the simulation while every CPU is briefly asleep during an IPI hand-off in MTTCG mode."
+    },
+    "router": {
+      "type": "router",
+      "params": { "log_level": 0 }
+    },
+
+    "ram_0": {
+      "type": "gs_memory",
+      "params": { "log_level": 0, "shared_memory": "${IS_SHARED_MEM}" },
+      "ports": {
+        "target_socket": { "address": "${INITIAL_DDR_SPACE}", "size": "0x100000000", "bind": "router.initiator_socket" }
+      }
+    },
+
+    "qemu_inst_mgr": { "type": "QemuInstanceManager" },
+
+    "qemu_inst": {
+      "type": "QemuInstance",
+      "args": [{ "ref": "qemu_inst_mgr" }, "AARCH64"],
+      "params": { "accel": "${ACCEL}", "tcg_mode": "MULTI", "sync_policy": "multithread-unconstrained" }
+    },
+
+    "gpex_0": {
+      "type": "qemu_gpex",
+      "args": [{ "ref": "qemu_inst" }],
+      "ports": {
+        "bus_master": { "bind": "router.target_socket" },
+        "pio_iface": { "address": "0x60200000", "size": "0x100000", "bind": "router.initiator_socket" },
+        "mmio_iface": { "address": "0x60300000", "size": "0x1fd00000", "bind": "router.initiator_socket" },
+        "ecam_iface": { "address": "0x43B50000", "size": "0x10000000", "bind": "router.initiator_socket" },
+        "mmio_iface_high": { "address": "0x400000000", "size": "0x200000000", "bind": "router.initiator_socket" },
+        "irq_out_0": { "bind": "gic_0.spi_in_541" },
+        "irq_out_1": { "bind": "gic_0.spi_in_542" },
+        "irq_out_2": { "bind": "gic_0.spi_in_543" },
+        "irq_out_3": { "bind": "gic_0.spi_in_544" }
+      }
+    },
+
+    "gic_0": {
+      "type": "arm_gicv3",
+      "args": [{ "ref": "qemu_inst" }],
+      "params": {
+        "num_cpus": "${ARM_NUM_CPUS}",
+        "redist_region": ["${ARM_NUM_CPUS}"],
+        "num_spi": 960
+      },
+      "ports": {
+        "dist_iface": { "address": "${GICD_BASE}", "size": "${GICR_OFFSET}", "bind": "router.initiator_socket" },
+        "redist_iface_0": { "address": "${GICD_BASE}+0x60000", "size": "0x1C0000", "bind": "router.initiator_socket" },
+        "irq_out_{i}": { "bind": "cpu_{i}.irq_in", "repeat": "${ARM_NUM_CPUS}" },
+        "fiq_out_{i}": { "bind": "cpu_{i}.fiq_in", "repeat": "${ARM_NUM_CPUS}" },
+        "virq_out_{i}": { "bind": "cpu_{i}.virq_in", "repeat": "${ARM_NUM_CPUS}" },
+        "vfiq_out_{i}": { "bind": "cpu_{i}.vfiq_in", "repeat": "${ARM_NUM_CPUS}" }
+      }
+    },
+
+    "virtionet0_0": {
+      "type": "virtio_mmio_net",
+      "args": [{ "ref": "qemu_inst" }],
+      "params": {
+        "netdev_str": "type=user,hostfwd=tcp::${HOST_PORT_SSH}-:22,hostfwd=tcp::${HOST_PORT_FTP}-:21,hostfwd=tcp::${HOST_PORT_56283}-:56283,hostfwd=tcp::${HOST_PORT_65534}-:65534,hostfwd=tcp::${HOST_PORT_65535}-:65535"
+      },
+      "ports": {
+        "mem": { "address": "0x1c120000", "size": "0x10000", "bind": "router.initiator_socket" },
+        "irq_out": { "bind": "gic_0.spi_in_18" }
+      }
+    },
+
+    "virtioblk_0": {
+      "type": "virtio_mmio_blk",
+      "args": [{ "ref": "qemu_inst" }],
+      "params": {
+        "blkdev_str": "file=${TOP}fw/Artifacts/image_ext4.img,format=raw,if=none,readonly=off"
+      },
+      "ports": {
+        "mem": { "address": "0x1c0d0000", "size": "0x2000", "bind": "router.initiator_socket" },
+        "irq_out": { "bind": "gic_0.spi_in_46" }
+      }
+    },
+
+    "charbackend_stdio_0": {
+      "type": "char_backend_stdio",
+      "params": { "read_write": true }
+    },
+
+    "pl011_uart_0": {
+      "type": "Pl011",
+      "dylib": "uart-pl011",
+      "ports": {
+        "target_socket": { "address": "${UART0}", "size": "0x1000", "bind": "router.initiator_socket" },
+        "irq": { "bind": "gic_0.spi_in_379" },
+        "backend_socket": { "bind": "charbackend_stdio_0.biflow_socket" }
+      }
+    },
+
+    "global_peripheral_initiator_arm_0": {
+      "type": "global_peripheral_initiator",
+      "args": [{ "ref": "qemu_inst" }, { "ref": "cpu_0" }],
+      "ports": {
+        "global_initiator": { "bind": "router.target_socket" }
+      }
+    },
+
+    "fallback_0": {
+      "type": "gs_memory",
+      "params": { "dmi_allow": false, "log_level": 0, "shared_memory": "${IS_SHARED_MEM}" },
+      "ports": {
+        "target_socket": { "address": "0x0", "size": "0x800000000", "priority": 1, "bind": "router.initiator_socket" }
+      }
+    },
+
+    "load": {
+      "type": "loader",
+      "ports": {
+        "initiator_socket": { "bind": "router.target_socket" }
+      },
+      "entries": [
+        { "bin_file": "${TOP}fw/Artifacts/Image.bin", "address": "${_KERNEL64_LOAD_ADDR}" },
+        { "bin_file": "${TOP}fw/Artifacts/ubuntu.dtb", "address": "${_DTB_LOAD_ADDR}" },
+        { "bin_file": "${TOP}fw/Artifacts/image_ext4_initrd.img", "address": "${_INITRD_LOAD_ADDR}" },
+        { "data": { "$lua": "_bootloader_aarch64" }, "address": "${INITIAL_DDR_SPACE}" }
+      ]
+    },
+
+    "cpu": {
+      "type": "cpu_arm_cortexA76",
+      "count": "${ARM_NUM_CPUS}",
+      "args": [{ "ref": "qemu_inst" }],
+      "params": {
+        "has_el3": false,
+        "has_el2": false,
+        "psci_conduit": { "$lua": "ACCEL == \"kvm\" and \"hvc\" or \"smc\"" },
+        "mp_affinity": { "$lua": "(math.floor(i / 8) << 8) | (i % 8)" },
+        "start_powered_off": true,
+        "rvbar": "${INITIAL_DDR_SPACE}"
+      },
+      "ports": {
+        "mem": { "bind": "router.target_socket" },
+        "irq_timer_phys_out": { "bind": "gic_0.ppi_in_cpu_{i}_30" },
+        "irq_timer_virt_out": { "bind": "gic_0.ppi_in_cpu_{i}_27" },
+        "irq_timer_hyp_out": { "bind": "gic_0.ppi_in_cpu_{i}_26" },
+        "irq_timer_sec_out": { "bind": "gic_0.ppi_in_cpu_{i}_29" },
+        "gicv3_maintenance_interrupt": { "bind": "gic_0.ppi_in_cpu_{i}_25" },
+        "pmu_interrupt": { "bind": "gic_0.ppi_in_cpu_{i}_23" }
+      },
+      "perIndex": {
+        "0": { "params": { "start_powered_off": false } }
+      }
+    }
+  }
+}

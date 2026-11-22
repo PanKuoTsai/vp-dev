@@ -1,0 +1,53 @@
+# Boot test of a VP Studio platform on a GitLab runner.
+#
+# The runner needs a QBox build (QBOX), the sim agent built for it, Node.js 18
+# or later and Python 3: a shell runner on a machine set up as in INSTALL.md,
+# or the VP Studio container image once it is built (tools/container).
+#
+# vp-run exit codes: 0 passed, 1 a step failed or timed out, 2 the simulator
+# failed, 3 setup error.
+
+variables:
+  QBOX: /opt/qbox                      # QBox checkout with build/platforms-vp
+  VP_STUDIO: /opt/vp-studio            # VP Studio checkout (or the unpacked .vsix)
+  VP_SIM_AGENT: /opt/vp-studio-build/sim-agent/sim_agent.so
+  PLATFORM: $QBOX/platforms/ubuntu/ubuntu-aarch64.platform.json
+
+boot:
+  tags: [qbox]
+  timeout: 30m
+  script:
+    # Boot to the login prompt, log in, check the kernel, power off cleanly.
+    # --snapshot keeps the disk image unchanged, so every run starts the same.
+    - >
+      sh $VP_STUDIO/bin/vp-run --qbox $QBOX --snapshot --timeout 900
+      --log boot.log --junit boot.xml
+      --expect 'login:' --send root
+      --expect 'Password:' --send-env GUEST_PASSWORD
+      --expect '# $' --send 'uname -r'
+      --expect '5\.15\.0-' --send poweroff
+      --wait-exit
+      $PLATFORM
+  artifacts:
+    when: always
+    paths: [boot.log]
+    reports:
+      junit: boot.xml
+
+agent-checks:
+  tags: [qbox]
+  timeout: 30m
+  script:
+    # Boot, then run Python checks against the running simulation (pause,
+    # timed runs, parameters). vp-run passes VP_AGENT_PORT to the command.
+    - >
+      sh $VP_STUDIO/bin/vp-run --qbox $QBOX --snapshot --timeout 900 --quiet
+      --log agent.log --junit agent.xml
+      --expect 'login:'
+      --exec "python3 $VP_STUDIO/examples/ci/test_platform.py"
+      $PLATFORM
+  artifacts:
+    when: always
+    paths: [agent.log]
+    reports:
+      junit: agent.xml

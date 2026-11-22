@@ -1,0 +1,22 @@
+#!/bin/sh
+# Run vp-run.js with a Node.js 18 or later: $VP_NODE, else "node" on the PATH,
+# else the Node.js inside VS Code (run as plain Node with ELECTRON_RUN_AS_NODE),
+# so machines with VS Code need no separate Node.js.
+here=$(cd "$(dirname "$0")" && pwd)
+
+node_ok() { "$@" -e 'process.exit(+process.versions.node.split(".")[0] >= 18 ? 0 : 1)' >/dev/null 2>&1; }
+
+if [ -n "$VP_NODE" ]; then
+  exec "$VP_NODE" "$here/vp-run.js" "$@"
+fi
+if command -v node >/dev/null 2>&1 && node_ok node; then
+  exec node "$here/vp-run.js" "$@"
+fi
+for code in /usr/share/code/code /usr/lib/code/code /opt/visual-studio-code/code /snap/code/current/usr/share/code/code \
+            /usr/share/codium/codium /usr/share/code-insiders/code-insiders; do
+  if [ -x "$code" ] && ELECTRON_RUN_AS_NODE=1 node_ok "$code"; then
+    ELECTRON_RUN_AS_NODE=1 exec "$code" "$here/vp-run.js" "$@"
+  fi
+done
+echo "vp-run: needs Node.js 18 or later: install it (Ubuntu: sudo apt install nodejs), or set VP_NODE to a node executable" >&2
+exit 3

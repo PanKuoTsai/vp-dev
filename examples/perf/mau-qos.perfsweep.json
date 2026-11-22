@@ -1,0 +1,39 @@
+{
+  "platform": "mau-2ddr.platform.json",
+  "description": "QoS on MAU0, where the CPU has the higher priority: with and without the display's reserved 6000 MB/s, as the CPU keeps more accesses in flight to DDR0. Without the reservation the display falls behind once the CPU fills MAU0; with it the display keeps 6000 MB/s and the CPU gets the rest.",
+  "sweep": [
+    {
+      "param": "mau0.masters.display.min_mbps",
+      "values": [
+        0,
+        6000
+      ]
+    },
+    {
+      "param": "cpu_ddr0.max_outstanding",
+      "values": [
+        4,
+        16,
+        32,
+        64
+      ]
+    }
+  ],
+  "metrics": [
+    "initiators.display.bandwidthMBps",
+    "initiators.display.latencyNs.p99",
+    "initiators.cpu@ddr0.bandwidthMBps",
+    "initiators.cpu@ddr0.latencyNs.p99",
+    "buses.mau0.responseUtilization",
+    "memories.ddr0.dataBusUtilization"
+  ],
+  "checks": [
+    {
+      "metric": "initiators.display.bandwidthMBps",
+      "min": 5900,
+      "where": {
+        "mau0.masters.display.min_mbps": 6000
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# Packaging of the VP Studio application (npm run package).
+# appId follows the reverse-domain convention (novatek.com.tw); the extension
+# publisher is "novatek" (package.json).
+appId: tw.com.novatek.vp-studio
+productName: VP Studio
+executableName: vp-studio
+copyright: VP Studio
+electronLanguages: [en-US]
+directories:
+  output: dist
+  buildResources: resources
+# Extensions are run from real files by Theia's extension host, so no asar.
+asar: false
+# Native modules were rebuilt for Electron by "theia rebuild:electron".
+npmRebuild: false
+files:
+  - package.json
+  - lib/**
+  - src-gen/**
+  - scripts/**
+  - "!**/*.map"
+extraResources:
+  - from: ../plugins
+    to: app/plugins
+linux:
+  category: Development
+  target: [AppImage]
+  artifactName: VP-Studio-${version}-${arch}.${ext}

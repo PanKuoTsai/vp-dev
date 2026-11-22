@@ -1,0 +1,201 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vp-studio/qbox-model.schema.json",
+  "title": "VP Studio model description",
+  "description": "A peripheral to generate a QBox module from (VP Studio: Generate Model Code).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "modelVersion",
+    "name"
+  ],
+  "definitions": {
+    "ident": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "num": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^(0x[0-9A-Fa-f]+|\\d+)$"
+        },
+        {
+          "type": "integer",
+          "minimum": 0
+        }
+      ]
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "modelVersion": {
+      "const": 1
+    },
+    "name": {
+      "$ref": "#/definitions/ident",
+      "description": "Module type and C++ class name. Platforms use it as \"type\"."
+    },
+    "description": {
+      "type": "string"
+    },
+    "regionSize": {
+      "$ref": "#/definitions/num",
+      "description": "Size of the register region on the bus. Default 0x1000."
+    },
+    "unmapped": {
+      "enum": [
+        "ignore",
+        "error"
+      ],
+      "description": "Access to bytes no register covers: ignore (read 0, writes dropped; the default) or error (TLM address error)."
+    },
+    "registers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "offset"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/definitions/ident"
+          },
+          "offset": {
+            "$ref": "#/definitions/num",
+            "description": "Byte offset in the region."
+          },
+          "size": {
+            "enum": [
+              1,
+              2,
+              4,
+              8
+            ],
+            "description": "Bytes. Default 4."
+          },
+          "access": {
+            "enum": [
+              "rw",
+              "ro",
+              "wo",
+              "w1c"
+            ],
+            "description": "rw read/write; ro read-only (writes ignored); wo write-only (reads 0); w1c write 1 to clear. Default rw."
+          },
+          "reset": {
+            "$ref": "#/definitions/num",
+            "description": "Value after reset. Default 0."
+          },
+          "description": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "bits"
+              ],
+              "properties": {
+                "name": {
+                  "$ref": "#/definitions/ident"
+                },
+                "bits": {
+                  "type": "string",
+                  "pattern": "^\\s*\\d+\\s*(:\\s*\\d+\\s*)?$",
+                  "description": "\"msb:lsb\" or one bit, e.g. \"7:4\"."
+                },
+                "description": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "params": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "type"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/definitions/ident",
+            "description": "CCI parameter name; the member is p_<name>."
+          },
+          "type": {
+            "enum": [
+              "bool",
+              "int32_t",
+              "uint32_t",
+              "int64_t",
+              "uint64_t",
+              "double",
+              "string"
+            ]
+          },
+          "default": {
+            "type": [
+              "boolean",
+              "number",
+              "string"
+            ]
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "description": "Signal outputs (interrupts): InitiatorSignalSocket<bool>; drive with set_<name>(value).",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/definitions/ident"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "description": "Signal inputs: TargetSignalSocket<bool>; override on_<name>(value). An input named reset resets the registers by default.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/definitions/ident"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "platform": "ddr-contention.platform.json",
+  "description": "How many transactions in flight the CPU may have before the display loses bandwidth, with the DRAM scheduling open rows first (fr_fcfs) or in order (fcfs). The check fails where the display gets less than its 6000 MB/s.",
+  "sweep": [
+    { "param": "ddr.scheduler", "values": ["fr_fcfs", "fcfs"] },
+    { "param": "cpu.max_outstanding", "values": [1, 2, 4, 8, 16, 32] }
+  ],
+  "metrics": [
+    "initiators.display.bandwidthMBps",
+    "initiators.display.latencyNs.p99",
+    "initiators.cpu.bandwidthMBps",
+    "initiators.cpu.latencyNs.p99",
+    "initiators.dma.bandwidthMBps",
+    "memories.ddr.dataBusUtilization",
+    "memories.ddr.rowHitRate"
+  ],
+  "checks": [
+    { "metric": "initiators.display.bandwidthMBps", "min": 5900 }
+  ]
+}

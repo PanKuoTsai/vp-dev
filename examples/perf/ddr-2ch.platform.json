@@ -1,0 +1,141 @@
+{
+  "$schema": "../../schemas/qbox-platform.schema.json",
+  "schemaVersion": "0.2",
+  "name": "ddr-2ch",
+  "description": "Two-channel version of ddr-contention: the same display, DMA and CPU traffic on two DDR4-3200 channels that are not interleaved. Channel 0 (ddr0, 0x0000_0000-0x1FFF_FFFF) holds the display frame buffer, channel 1 (ddr1, 0x2000_0000-0x3FFF_FFFF) the DMA and CPU data, so the CPU no longer competes with the display for one channel. Compare with ddr-contention using ddr-2ch.perfsweep.json.",
+  "platform": {
+    "moduletype": "Container",
+    "params": {
+      "quantum_ns": 1000
+    }
+  },
+  "modules": {
+    "display": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "Display controller: reads its frame buffer in channel 0 in order at 6000 MB/s.",
+      "params": {
+        "address": "0x0",
+        "size": "0x2000000",
+        "pattern": "sequential",
+        "burst_bytes": 64,
+        "rate_mbps": 6000,
+        "max_outstanding": 16,
+        "count": 0,
+        "duration_ns": 200000,
+        "qos": 2
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "bus.target_socket"
+        }
+      }
+    },
+    "dma": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "DMA engine: 256-byte writes, up to 6000 MB/s, to channel 1.",
+      "params": {
+        "address": "0x20000000",
+        "size": "0x4000000",
+        "pattern": "sequential",
+        "read_ratio": 0,
+        "burst_bytes": 256,
+        "rate_mbps": 6000,
+        "max_outstanding": 4,
+        "count": 0,
+        "duration_ns": 200000,
+        "seed": 2
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "bus.target_socket"
+        }
+      }
+    },
+    "cpu": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "CPU cluster: cache-line misses to random addresses in channel 1, 70% reads.",
+      "params": {
+        "address": "0x28000000",
+        "size": "0x8000000",
+        "pattern": "random",
+        "read_ratio": 0.7,
+        "burst_bytes": 64,
+        "max_outstanding": 4,
+        "count": 0,
+        "duration_ns": 200000,
+        "seed": 3,
+        "qos": 1
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "bus.target_socket"
+        }
+      }
+    },
+    "bus": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "params": {
+        "clock_mhz": 1000,
+        "data_bytes": 16,
+        "latency_cycles": 2,
+        "arbitration": "round_robin",
+        "target_queue": 8
+      }
+    },
+    "ddr0": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "DDR4-3200 channel 0, 64-bit, 16 banks, 8 KiB pages: 0x00000000 to 0x1FFFFFFF.",
+      "params": {
+        "clock_mhz": 1600,
+        "data_bytes": 8,
+        "banks": 16,
+        "row_bytes": 8192,
+        "tRCD": 22,
+        "tCL": 22,
+        "tRP": 22,
+        "scheduler": "fr_fcfs"
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x0",
+          "size": "0x20000000",
+          "bind": "bus.initiator_socket"
+        }
+      }
+    },
+    "ddr1": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "DDR4-3200 channel 1, 64-bit, 16 banks, 8 KiB pages: 0x20000000 to 0x3FFFFFFF.",
+      "params": {
+        "clock_mhz": 1600,
+        "data_bytes": 8,
+        "banks": 16,
+        "row_bytes": 8192,
+        "tRCD": 22,
+        "tCL": 22,
+        "tRP": 22,
+        "scheduler": "fr_fcfs"
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x20000000",
+          "size": "0x20000000",
+          "bind": "bus.initiator_socket"
+        }
+      }
+    },
+    "stats": {
+      "type": "perf_stats",
+      "dylib": "perf",
+      "params": {
+        "output": "ddr-2ch.perf.json"
+      }
+    }
+  }
+}

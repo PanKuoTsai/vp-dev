@@ -1,0 +1,395 @@
+{
+  "name": "vp-studio",
+  "displayName": "VP Studio",
+  "description": "Configure, inspect, run and debug QBox-based virtual platforms from a JSON platform description.",
+  "version": "0.2.2",
+  "publisher": "novatek",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Other", "Debuggers"],
+  "main": "./extension.js",
+  "bin": { "vp-run": "bin/vp-run.js" },
+  "activationEvents": [
+    "workspaceContains:**/*.platform.json",
+    "workspaceContains:**/*.model.json",
+    "onLanguage:json",
+    "onDebugResolve:gdbtarget"
+  ],
+  "contributes": {
+    "jsonValidation": [
+      { "fileMatch": "*.platform.json", "url": "./schemas/qbox-platform.schema.json" },
+      { "fileMatch": "*.model.json", "url": "./schemas/qbox-model.schema.json" },
+      { "fileMatch": "*.registers.json", "url": "./schemas/qbox-registers.schema.json" },
+      { "fileMatch": "*.perfsweep.json", "url": "./schemas/vp-perfsweep.schema.json" }
+    ],
+    "commands": [
+      { "command": "vpStudio.generate", "title": "Generate Lua Configuration", "category": "VP Studio", "icon": "$(file-code)" },
+      { "command": "vpStudio.start", "title": "Start Simulation", "category": "VP Studio", "icon": "$(play)" },
+      { "command": "vpStudio.startDebug", "title": "Start Simulation with Target Debug Port", "category": "VP Studio", "icon": "$(debug-alt)" },
+      { "command": "vpStudio.startTrace", "title": "Start Simulation with Tracing…", "category": "VP Studio", "icon": "$(pulse)" },
+      { "command": "vpStudio.showTrace", "title": "Show Transaction Trace", "category": "VP Studio", "icon": "$(list-flat)" },
+      { "command": "vpStudio.chooseProbes", "title": "Choose Probes…", "category": "VP Studio", "icon": "$(record)", "enablement": "vpStudio.agentConnected" },
+      { "command": "vpStudio.refreshGuest", "title": "Refresh Guest Processes", "category": "VP Studio", "icon": "$(refresh)" },
+      { "command": "vpStudio.showKernelLog", "title": "Show Guest Kernel Log", "category": "VP Studio", "icon": "$(output)" },
+      { "command": "vpStudio.startProfile", "title": "Start Simulation with Profiling", "category": "VP Studio", "icon": "$(flame)" },
+      { "command": "vpStudio.showProfile", "title": "Show Profile", "category": "VP Studio", "icon": "$(flame)" },
+      { "command": "vpStudio.perf.run", "title": "Run Performance Experiment", "category": "VP Studio", "icon": "$(dashboard)" },
+      { "command": "vpStudio.perf.sweep", "title": "Run Performance Sweep…", "category": "VP Studio", "icon": "$(graph-line)" },
+      { "command": "vpStudio.perf.newSweep", "title": "New Performance Sweep…", "category": "VP Studio", "icon": "$(new-file)" },
+      { "command": "vpStudio.perf.open", "title": "Open Performance Results…", "category": "VP Studio", "icon": "$(folder-opened)" },
+      { "command": "vpStudio.perf.createExample", "title": "Create Performance Example", "category": "VP Studio", "icon": "$(beaker)" },
+      { "command": "vpStudio.startFtrace", "title": "Start Simulation with Function Trace", "category": "VP Studio", "icon": "$(call-outgoing)" },
+      { "command": "vpStudio.startOpenOcd", "title": "Start Simulation with OpenOCD Port", "category": "VP Studio", "icon": "$(plug)" },
+      { "command": "vpStudio.ftrace.record", "title": "Function Trace: Start Recording…", "category": "VP Studio", "icon": "$(record)" },
+      { "command": "vpStudio.ftrace.save", "title": "Function Trace: Stop and Save", "category": "VP Studio", "icon": "$(debug-stop)" },
+      { "command": "vpStudio.ftrace.convert", "title": "Function Trace: Convert Trace File…", "category": "VP Studio", "icon": "$(arrow-swap)" },
+      { "command": "vpStudio.stop", "title": "Stop Simulation", "category": "VP Studio", "icon": "$(debug-stop)" },
+      { "command": "vpStudio.showPlatform", "title": "Show Platform View", "category": "VP Studio", "icon": "$(type-hierarchy)" },
+      { "command": "vpStudio.addDebugConfigurations", "title": "Add Debug Configurations", "category": "VP Studio", "icon": "$(debug-configure)" },
+      { "command": "vpStudio.createExample", "title": "Create Example Platform (Ubuntu AArch64)", "category": "VP Studio", "icon": "$(new-file)" },
+      { "command": "vpStudio.pause", "title": "Pause Simulation", "category": "VP Studio", "icon": "$(debug-pause)" },
+      { "command": "vpStudio.continue", "title": "Continue Simulation", "category": "VP Studio", "icon": "$(debug-continue)" },
+      { "command": "vpStudio.refreshRegisters", "title": "Read Registers Again", "category": "VP Studio", "icon": "$(refresh)" },
+      { "command": "vpStudio.setRegister", "title": "Set Value…", "category": "VP Studio", "icon": "$(edit)" },
+      { "command": "vpStudio.readRegister", "title": "Read Now", "category": "VP Studio", "icon": "$(eye)" },
+      { "command": "vpStudio.runFor", "title": "Run For…", "category": "VP Studio", "icon": "$(debug-step-over)" },
+      { "command": "vpStudio.runUntil", "title": "Run Until…", "category": "VP Studio", "icon": "$(watch)" },
+      { "command": "vpStudio.connectAgent", "title": "Connect to Sim Agent…", "category": "VP Studio", "icon": "$(plug)" },
+      { "command": "vpStudio.refreshParams", "title": "Refresh Parameters", "category": "VP Studio", "icon": "$(refresh)" },
+      { "command": "vpStudio.copyParam", "title": "Copy Name and Value", "category": "VP Studio" },
+      { "command": "vpStudio.setParam", "title": "Set Value…", "category": "VP Studio", "icon": "$(edit)" },
+      { "command": "vpStudio.addModule", "title": "Add Module…", "category": "VP Studio", "icon": "$(add)" },
+      { "command": "vpStudio.checkQBox", "title": "Check QBox Version", "category": "VP Studio", "icon": "$(verified)" },
+      { "command": "vpStudio.generateDeviceTree", "title": "Generate Device Tree", "category": "VP Studio", "icon": "$(symbol-structure)" },
+      { "command": "vpStudio.exportKit", "title": "Export Kit…", "category": "VP Studio", "icon": "$(package)" },
+      { "command": "vpStudio.saveCheckpoint", "title": "Save Checkpoint…", "category": "VP Studio", "icon": "$(save-as)" },
+      { "command": "vpStudio.startFromCheckpoint", "title": "Start from Checkpoint…", "category": "VP Studio", "icon": "$(history)" },
+      { "command": "vpStudio.openKit", "title": "Open Kit…", "category": "VP Studio", "icon": "$(folder-opened)" },
+      { "command": "vpStudio.newModel", "title": "New Model…", "category": "VP Studio", "icon": "$(new-folder)" },
+      { "command": "vpStudio.importIpxact", "title": "Import IP-XACT…", "category": "VP Studio", "icon": "$(desktop-download)" },
+      { "command": "vpStudio.thirdPartyDebuggers", "title": "Third-Party Debugger Setup…", "category": "VP Studio", "icon": "$(link-external)" },
+      { "command": "vpStudio.showCpuRegisters", "title": "Show CPU Registers", "category": "VP Studio", "icon": "$(symbol-variable)" },
+      { "command": "vpStudio.mapSources", "title": "Map Kernel Sources…", "category": "VP Studio", "icon": "$(file-symlink-directory)", "enablement": "vpStudio.guestDebug" },
+      { "command": "vpStudio.remote.selectHost", "title": "Select Simulation Host…", "category": "VP Studio", "icon": "$(remote)" },
+      { "command": "vpStudio.remote.check", "title": "Check Remote Host", "category": "VP Studio", "icon": "$(vm-connect)" },
+      { "command": "vpStudio.remote.buildSimAgent", "title": "Build Sim Agent on Remote Host", "category": "VP Studio", "icon": "$(cloud-upload)" },
+      { "command": "vpStudio.remote.forgetPassword", "title": "Forget Remote Password", "category": "VP Studio", "icon": "$(key)" },
+      { "command": "vpStudio.generateModel", "title": "Generate Model Code", "category": "VP Studio", "icon": "$(file-code)" },
+      { "command": "vpStudio.buildModel", "title": "Build Model", "category": "VP Studio", "icon": "$(tools)" },
+      { "command": "vpStudio.remote.buildModel", "title": "Build Model on Remote Host", "category": "VP Studio", "icon": "$(cloud-upload)" },
+      { "command": "vpStudio.buildQbox", "title": "Build QBox", "category": "VP Studio", "icon": "$(package)" },
+      { "command": "vpStudio.buildSimAgent", "title": "Build Sim Agent", "category": "VP Studio", "icon": "$(tools)" },
+      { "command": "vpStudio.menu", "title": "Menu…", "category": "VP Studio", "icon": "$(circuit-board)" }
+    ],
+    "submenus": [
+      { "id": "vpStudio.menu", "label": "VP Studio", "icon": "$(circuit-board)" },
+      { "id": "vpStudio.menu.simulation", "label": "Simulation" },
+      { "id": "vpStudio.menu.analysis", "label": "Analysis" },
+      { "id": "vpStudio.menu.debug", "label": "Debug" },
+      { "id": "vpStudio.menu.platform", "label": "Platform" },
+      { "id": "vpStudio.menu.models", "label": "Models" },
+      { "id": "vpStudio.menu.setup", "label": "Setup" }
+    ],
+    "menus": {
+      "vpStudio.menu": [
+        { "submenu": "vpStudio.menu.simulation", "group": "1_groups@1" },
+        { "submenu": "vpStudio.menu.analysis", "group": "1_groups@2" },
+        { "submenu": "vpStudio.menu.debug", "group": "1_groups@3" },
+        { "submenu": "vpStudio.menu.platform", "group": "1_groups@4" },
+        { "submenu": "vpStudio.menu.models", "group": "1_groups@5" },
+        { "submenu": "vpStudio.menu.setup", "group": "1_groups@6" }
+      ],
+      "vpStudio.menu.simulation": [
+        { "command": "vpStudio.start", "when": "!vpStudio.running", "group": "1_section@1" },
+        { "command": "vpStudio.startDebug", "when": "!vpStudio.running", "group": "1_section@2" },
+        { "command": "vpStudio.startTrace", "when": "!vpStudio.running", "group": "1_section@3" },
+        { "command": "vpStudio.startProfile", "when": "!vpStudio.running", "group": "1_section@4" },
+        { "command": "vpStudio.startFtrace", "when": "!vpStudio.running", "group": "1_section@5" },
+        { "command": "vpStudio.startOpenOcd", "when": "!vpStudio.running && vpStudio.localSim", "group": "1_section@6" },
+        { "command": "vpStudio.startFromCheckpoint", "when": "!vpStudio.running && vpStudio.localSim", "group": "1_section@7" },
+        { "command": "vpStudio.pause", "when": "vpStudio.agentConnected && !vpStudio.paused", "group": "2_section@1" },
+        { "command": "vpStudio.continue", "when": "vpStudio.paused", "group": "2_section@2" },
+        { "command": "vpStudio.runFor", "when": "vpStudio.agentConnected", "group": "2_section@3" },
+        { "command": "vpStudio.runUntil", "when": "vpStudio.agentConnected", "group": "2_section@4" },
+        { "command": "vpStudio.stop", "when": "vpStudio.running", "group": "2_section@5" },
+        { "command": "vpStudio.saveCheckpoint", "when": "vpStudio.agentConnected && vpStudio.localSim", "group": "3_section@1" },
+        { "command": "vpStudio.connectAgent", "when": "!vpStudio.agentConnected", "group": "3_section@2" }
+      ],
+      "vpStudio.menu.analysis": [
+        { "command": "vpStudio.showTrace", "group": "1_section@1" },
+        { "command": "vpStudio.chooseProbes", "when": "vpStudio.agentConnected", "group": "1_section@2" },
+        { "command": "vpStudio.showProfile", "group": "2_section@1" },
+        { "command": "vpStudio.ftrace.record", "when": "vpStudio.agentConnected", "group": "3_section@1" },
+        { "command": "vpStudio.ftrace.save", "when": "vpStudio.agentConnected", "group": "3_section@2" },
+        { "command": "vpStudio.ftrace.convert", "group": "3_section@3" },
+        { "command": "vpStudio.showKernelLog", "when": "vpStudio.guestDebug", "group": "4_section@1" },
+        { "command": "vpStudio.perf.run", "when": "vpStudio.localSim", "group": "5_section@1" },
+        { "command": "vpStudio.perf.sweep", "when": "vpStudio.localSim", "group": "5_section@2" },
+        { "command": "vpStudio.perf.newSweep", "group": "5_section@3" },
+        { "command": "vpStudio.perf.open", "group": "5_section@4" },
+        { "command": "vpStudio.perf.createExample", "group": "5_section@5" }
+      ],
+      "vpStudio.menu.debug": [
+        { "command": "vpStudio.addDebugConfigurations", "group": "1_section@1" },
+        { "command": "vpStudio.thirdPartyDebuggers", "group": "1_section@2" },
+        { "command": "vpStudio.showCpuRegisters", "group": "2_section@1" },
+        { "command": "vpStudio.mapSources", "when": "vpStudio.guestDebug", "group": "2_section@2" }
+      ],
+      "vpStudio.menu.platform": [
+        { "command": "vpStudio.showPlatform", "group": "1_section@1" },
+        { "command": "vpStudio.addModule", "group": "1_section@2" },
+        { "command": "vpStudio.generate", "group": "2_section@1" },
+        { "command": "vpStudio.generateDeviceTree", "group": "2_section@2" },
+        { "command": "vpStudio.createExample", "group": "3_section@1" },
+        { "command": "vpStudio.exportKit", "group": "3_section@2" },
+        { "command": "vpStudio.openKit", "group": "3_section@3" }
+      ],
+      "vpStudio.menu.models": [
+        { "command": "vpStudio.newModel", "group": "1_section@1" },
+        { "command": "vpStudio.importIpxact", "group": "1_section@2" },
+        { "command": "vpStudio.generateModel", "group": "2_section@1" },
+        { "command": "vpStudio.buildModel", "group": "2_section@2" },
+        { "command": "vpStudio.remote.buildModel", "group": "2_section@3" }
+      ],
+      "vpStudio.menu.setup": [
+        { "command": "vpStudio.buildQbox", "when": "vpStudio.localSim", "group": "1_section@1" },
+        { "command": "vpStudio.buildSimAgent", "when": "vpStudio.localSim", "group": "1_section@2" },
+        { "command": "vpStudio.checkQBox", "when": "vpStudio.localSim", "group": "1_section@3" },
+        { "command": "vpStudio.remote.selectHost", "group": "2_section@1" },
+        { "command": "vpStudio.remote.check", "group": "2_section@2" },
+        { "command": "vpStudio.remote.buildSimAgent", "group": "2_section@3" },
+        { "command": "vpStudio.remote.forgetPassword", "when": "vpStudio.passwordLogin", "group": "2_section@4" }
+      ],
+      "editor/title": [
+        { "submenu": "vpStudio.menu", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "navigation@0" },
+        { "command": "vpStudio.showPlatform", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "navigation@1" },
+        { "command": "vpStudio.generateModel", "when": "resourceFilename =~ /\\.model\\.json$/", "group": "navigation@1" },
+        { "command": "vpStudio.buildModel", "when": "resourceFilename =~ /\\.model\\.json$/", "group": "navigation@2" },
+        { "command": "vpStudio.start", "when": "resourceFilename =~ /\\.platform\\.json$/ && !vpStudio.running", "group": "navigation@2" },
+        { "command": "vpStudio.stop", "when": "resourceFilename =~ /\\.platform\\.json$/ && vpStudio.running", "group": "navigation@2" },
+        { "command": "vpStudio.pause", "when": "resourceFilename =~ /\\.platform\\.json$/ && vpStudio.agentConnected && !vpStudio.paused", "group": "navigation@3" },
+        { "command": "vpStudio.continue", "when": "resourceFilename =~ /\\.platform\\.json$/ && vpStudio.paused", "group": "navigation@3" },
+        { "command": "vpStudio.showTrace", "when": "resourceFilename =~ /\\.platform\\.json$/ && vpStudio.agentConnected", "group": "navigation@4" },
+        { "command": "vpStudio.chooseProbes", "when": "resourceFilename =~ /\\.platform\\.json$/ && vpStudio.agentConnected", "group": "navigation@5" }
+      ],
+      "view/title": [
+        { "command": "vpStudio.pause", "when": "view == vpStudio.params && vpStudio.agentConnected && !vpStudio.paused", "group": "navigation@1" },
+        { "command": "vpStudio.continue", "when": "view == vpStudio.params && vpStudio.paused", "group": "navigation@1" },
+        { "command": "vpStudio.showTrace", "when": "view == vpStudio.params && vpStudio.agentConnected", "group": "navigation@3" },
+        { "command": "vpStudio.chooseProbes", "when": "view == vpStudio.params && vpStudio.agentConnected", "group": "navigation@4" },
+        { "command": "vpStudio.saveCheckpoint", "when": "view == vpStudio.params && vpStudio.agentConnected", "group": "navigation@5" },
+        { "command": "vpStudio.refreshParams", "when": "view == vpStudio.params && vpStudio.agentConnected", "group": "navigation@2" },
+        { "command": "vpStudio.refreshGuest", "when": "view == vpStudio.guest", "group": "navigation@1" },
+        { "command": "vpStudio.showKernelLog", "when": "view == vpStudio.guest", "group": "navigation@2" },
+        { "command": "vpStudio.runFor", "when": "view == vpStudio.params && vpStudio.agentConnected", "group": "1_run@1" },
+        { "command": "vpStudio.runUntil", "when": "view == vpStudio.params && vpStudio.agentConnected", "group": "1_run@2" },
+        { "command": "vpStudio.pause", "when": "view == vpStudio.registers && vpStudio.agentConnected && !vpStudio.paused", "group": "navigation@1" },
+        { "command": "vpStudio.continue", "when": "view == vpStudio.registers && vpStudio.paused", "group": "navigation@1" },
+        { "command": "vpStudio.refreshRegisters", "when": "view == vpStudio.registers && vpStudio.agentConnected", "group": "navigation@2" }
+      ],
+      "view/item/context": [
+        { "command": "vpStudio.setParam", "when": "view == vpStudio.params && viewItem == vpParam", "group": "inline" },
+        { "command": "vpStudio.setParam", "when": "view == vpStudio.params && viewItem == vpParam", "group": "1_edit@1" },
+        { "command": "vpStudio.copyParam", "when": "view == vpStudio.params && viewItem =~ /^vpParam/", "group": "1_edit@2" },
+        { "command": "vpStudio.setRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpRegW|^vpField$/", "group": "inline" },
+        { "command": "vpStudio.setRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpRegW|^vpField$/", "group": "1_edit@1" },
+        { "command": "vpStudio.readRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpReg(RO|W)Unread$/", "group": "inline" },
+        { "command": "vpStudio.readRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpReg/", "group": "1_edit@2" }
+      ],
+      "explorer/context": [
+        { "command": "vpStudio.generate", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "vpStudio@1" },
+        { "command": "vpStudio.showPlatform", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "vpStudio@2" },
+        { "command": "vpStudio.generateDeviceTree", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "vpStudio@3" },
+        { "command": "vpStudio.exportKit", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "vpStudio@4" },
+        { "command": "vpStudio.startFromCheckpoint", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "vpStudio@5" },
+        { "command": "vpStudio.thirdPartyDebuggers", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "vpStudio@6" },
+        { "command": "vpStudio.openKit", "when": "resourceFilename =~ /\\.(tar\\.gz|tgz)$/", "group": "vpStudio@1" },
+        { "command": "vpStudio.buildModel", "when": "resourceFilename =~ /\\.model\\.json$/", "group": "vpStudio@1" },
+        { "command": "vpStudio.importIpxact", "when": "resourceExtname == .xml", "group": "vpStudio@1" },
+        { "command": "vpStudio.ftrace.convert", "when": "resourceExtname == .vpft", "group": "vpStudio@1" }
+      ],
+      "commandPalette": [
+        { "command": "vpStudio.stop", "when": "vpStudio.running" },
+        { "command": "vpStudio.pause", "when": "vpStudio.agentConnected && !vpStudio.paused" },
+        { "command": "vpStudio.continue", "when": "vpStudio.paused" },
+        { "command": "vpStudio.runFor", "when": "vpStudio.agentConnected" },
+        { "command": "vpStudio.runUntil", "when": "vpStudio.agentConnected" },
+        { "command": "vpStudio.refreshParams", "when": "vpStudio.agentConnected" },
+        { "command": "vpStudio.refreshGuest", "when": "vpStudio.guestDebug" },
+        { "command": "vpStudio.saveCheckpoint", "when": "vpStudio.agentConnected" },
+        { "command": "vpStudio.ftrace.record", "when": "vpStudio.agentConnected" },
+        { "command": "vpStudio.ftrace.save", "when": "vpStudio.agentConnected" },
+        { "command": "vpStudio.showKernelLog", "when": "vpStudio.guestDebug" },
+        { "command": "vpStudio.copyParam", "when": "false" },
+        { "command": "vpStudio.setParam", "when": "false" },
+        { "command": "vpStudio.setRegister", "when": "false" },
+        { "command": "vpStudio.readRegister", "when": "false" },
+        { "command": "vpStudio.refreshRegisters", "when": "vpStudio.agentConnected" }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "vpStudio", "title": "VP Studio", "icon": "media/vp-studio.svg" }
+      ]
+    },
+    "views": {
+      "vpStudio": [
+        { "id": "vpStudio.actions", "name": "Actions" },
+        { "id": "vpStudio.modules", "name": "Platform Modules", "when": "resourceFilename =~ /\\.platform\\.json$/ || vpStudio.running" },
+        { "id": "vpStudio.params", "name": "Simulation Parameters", "when": "vpStudio.agentConnected" },
+        { "id": "vpStudio.registers", "name": "Peripheral Registers", "when": "vpStudio.agentConnected" },
+        { "id": "vpStudio.guest", "name": "Guest Processes", "when": "vpStudio.guestDebug" }
+      ],
+      "debug": [
+        { "type": "webview", "id": "vpStudio.cpuRegisters", "name": "CPU Registers", "when": "debugType == 'gdbtarget'" }
+      ]
+    },
+    "viewsWelcome": [
+      { "view": "vpStudio.modules", "contents": "Open a *.platform.json file to see its modules.\n[Create Example Platform](command:vpStudio.createExample)" }
+    ],
+    "configuration": {
+      "title": "VP Studio",
+      "properties": {
+        "vpStudio.executable": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "build/platforms-vp",
+          "description": "Simulator executable, absolute or relative to the working directory."
+        },
+        "vpStudio.catalog": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "",
+          "description": "QBox component catalog used to check module types, ports and parameters. Empty uses the catalog bundled with the extension; a path (absolute or relative to the workspace folder) uses one generated by tools/qbox-catalog; \"none\" turns the checks off."
+        },
+        "vpStudio.debug.sourceMap": {
+          "scope": "machine-overridable",
+          "type": "object",
+          "default": {},
+          "additionalProperties": { "type": "string" },
+          "description": "Where target debug sessions find sources built on another machine: { \"/build/linux-oPNunh/linux-5.15.0\": \"/home/me/src/linux-5.15.0\" }. Each entry becomes gdb's set substitute-path at attach. \"VP Studio: Map Kernel Sources…\" fills it in from a stopped frame."
+        },
+        "vpStudio.debug.linuxAwareness": {
+          "type": "boolean",
+          "default": true,
+          "description": "Load VP Studio's Linux script (tools/gdb/vp-linux.py) in target debug sessions (type gdbtarget): on attach it moves the kernel symbols to the running kernel's KASLR offset, it adds the gdb commands vp-ps, vp-dmesg and vp-kaslr, and it feeds the Guest Processes view. Needs the kernel's vmlinux as the program."
+        },
+        "vpStudio.ftrace.bufferPerCpu": {
+          "type": "integer",
+          "default": 262144,
+          "minimum": 1024,
+          "description": "Calls and returns the function trace keeps per CPU (32 bytes each; the newest are kept). The default, 8 MiB per CPU, holds about half a second to a few seconds of a busy kernel. Takes effect at the next Start Simulation with Function Trace."
+        },
+        "vpStudio.platformView.openBeside": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the platform view beside the platform JSON (split editor) instead of as a full-width tab. Full width shows the module list, block diagram and inspector together; beside keeps the JSON in view while editing. In full width, \"Show in JSON\" and double-click open the JSON beside the view."
+        },
+        "vpStudio.probes.insertAll": {
+          "type": "boolean",
+          "default": true,
+          "description": "Put a probe at every bus-mapped port and signal a probe fits in when a simulation starts (needs sim agent 0.9.0). Probes do not record until turned on with \"VP Studio: Choose Probes…\" or the Transaction Trace panel, so the lines to watch can change without a restart. Devices are then always accessed through SystemC (no DMI or QEMU region shortcut), which slows the simulation a little. Off: probes only where \"Start Simulation with Tracing\" puts them."
+        },
+        "vpStudio.simAgent.library": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "",
+          "description": "Sim agent library (sim_agent.so) added to every simulation started from VP Studio, for pause, continue and the parameter view. Empty uses tools/sim-agent/vp_sim_agent.so in the extension folder (built by tools/sim-agent/build.sh); a path (absolute or relative to the workspace folder) uses another build; \"none\" starts simulations without it."
+        },
+        "vpStudio.perf.timeoutSeconds": {
+          "type": "number",
+          "default": 600,
+          "minimum": 10,
+          "description": "Limit for one performance run (Run Performance Experiment, each run of a sweep), in seconds of real time. A sweep file's timeoutSeconds takes precedence for its runs."
+        },
+        "vpStudio.perf.jobs": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Runs of a performance sweep at the same time. 0: the sweep file's jobs, else half the CPUs (each run uses one)."
+        },
+        "vpStudio.dtc": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "dtc",
+          "description": "Device tree compiler used by Generate Device Tree, the Device tree tab and Start Simulation (when the platform sets devicetree.output). \"remote\" runs dtc on the simulation host; VS Code on Windows does that when a simulation host is set and this is left at \"dtc\"."
+        },
+        "vpStudio.workingDirectory": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "",
+          "description": "Directory the simulator is started in. Empty means the workspace folder."
+        },
+        "vpStudio.luaFlag": {
+          "type": "string",
+          "default": "-l",
+          "description": "Command-line flag that passes the Lua configuration to the simulator."
+        },
+        "vpStudio.debug.gdbPort": {
+          "type": "integer",
+          "default": 1234,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "TCP port for the target software gdb server."
+        },
+        "vpStudio.debug.cpuInstance": {
+          "type": "string",
+          "default": "cpu_0",
+          "description": "Instance that receives the gdb port parameter when starting with target debug."
+        },
+        "vpStudio.debug.gdbPortParam": {
+          "type": "string",
+          "default": "gdb_port",
+          "description": "Name of the CPU parameter that opens a gdb server. Check it against your QBox version."
+        },
+        "vpStudio.debug.targetGdb": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "gdb-multiarch",
+          "description": "gdb used to debug target software."
+        },
+        "vpStudio.remote.host": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Run simulations on another machine: an ssh destination (`user@host`, or a `Host` of `~/.ssh/config`). Empty runs them on this machine. Needs key authentication (ssh must log in without a password). VP Studio generates the Lua here, runs the simulator there in a terminal (`ssh -tt`), and forwards the sim agent, gdb and the platform's host ports to this machine. Use **VP Studio: Select Simulation Host…** to switch."
+        },
+        "vpStudio.remote.root": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Absolute path on the remote host of the folder that matches this workspace folder (usually the QBox folder). Platform files are found at the same place below it; missing ones can be uploaded at start."
+        },
+        "vpStudio.remote.executable": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "default": "build/platforms-vp",
+          "description": "The simulator on the remote host: absolute, or relative to vpStudio.remote.root. Its folder must hold QBox's compile_commands.json to build the sim agent there."
+        },
+        "vpStudio.remote.sshArgs": {
+          "scope": "machine-overridable",
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "markdownDescription": "Extra arguments for every `ssh` call, e.g. `[\"-p\", \"2222\", \"-i\", \"~/.ssh/id_sim\"]` or `[\"-J\", \"jumphost\"]`."
+        },
+        "vpStudio.remote.auth": {
+          "scope": "machine-overridable",
+          "type": "string",
+          "enum": ["key", "password"],
+          "enumDescriptions": [
+            "Log in with an SSH key (no password; ssh runs in BatchMode).",
+            "Log in with a password: VP Studio asks once and keeps it while the window is open, or in VS Code's secret storage when you choose so."
+          ],
+          "default": "key",
+          "markdownDescription": "How VP Studio logs in to the simulation host. With `password`, ssh asks through VP Studio (SSH_ASKPASS; OpenSSH 8.4 or later, as on Windows 10/11 and Ubuntu 22.04)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node test/core.test.js",
+    "package": "npx @vscode/vsce package"
+  }
+}

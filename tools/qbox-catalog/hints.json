@@ -1,0 +1,57 @@
+{
+  "_comment": "Inputs qbox-catalog cannot derive from QBox sources. 'args' gives the class (or module type) of each sc_object* constructor argument, in order. 'params' are presets the constructor refuses to run without; their values are placeholders for introspection, not recommendations. 'note' is copied into the catalog.",
+  "classAliases": {
+    "QemuVirtioGpu": "virtio_gpu_pci"
+  },
+  "modules": {
+    "addrtr": {
+      "params": { "target_socket.address": 0, "target_socket.size": 4096 }
+    },
+    "char_backend_file": {
+      "params": { "read_file": "/dev/null" },
+      "note": "Needs read_file or write_file (or both)."
+    },
+    "nvme": {
+      "params": { "blob_file": "/dev/null" }
+    },
+    "qmp": {
+      "params": { "qmp_str": "unix:/tmp/qbox-catalog-qmp.sock,server,wait=off" }
+    },
+    "usb_storage": {
+      "params": { "blkdev_str": "file=/dev/null,format=raw,if=none" }
+    },
+    "vhost_user_vsock_pci": {
+      "params": { "exec_backend": false },
+      "note": "With exec_backend true (the default), vsock_device_backend_path must name the vhost-device-vsock executable."
+    },
+    "display": {
+      "args": ["virtio_gpu_pci"],
+      "note": "Argument is the GPU device to display."
+    },
+    "vnc": {
+      "args": ["virtio_gpu_pci"],
+      "params": { "gpu_output": 0 },
+      "note": "Argument is the GPU device to serve; gpu_output selects the head and must be set (QBox's error message calls it display_index)."
+    },
+    "arm_gicv2m": {
+      "args": ["QemuInstance", "arm_gicv3"],
+      "note": "Second argument is the GIC whose SPIs the MSI frame raises."
+    },
+    "riscv_aclint_swi": {
+      "args": ["QemuInstance", "QemuInstance"],
+      "note": "The second constructor argument is accepted but unused."
+    },
+    "generic_lua_model": {
+      "note": "Arguments are a container holding a reg_router and a gs_memory for the registers; not introspected."
+    },
+    "component_constructor": {
+      "note": "Loads the shared library named by node_exe_path (and needs node_name) in its constructor, so it cannot be introspected without a real component."
+    },
+    "python_binder": {
+      "note": "Imports the Python module named by py_module_dir and py_module_name in its constructor, so it cannot be introspected without a real module."
+    },
+    "ContainerWithArgs": {
+      "note": "Generic container that takes its parent container as argument; not introspected."
+    }
+  }
+}

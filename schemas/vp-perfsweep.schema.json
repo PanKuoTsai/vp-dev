@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://novatek.com.tw/vp-studio/schemas/vp-perfsweep.schema.json",
+  "title": "VP Studio performance sweep",
+  "description": "Runs a platform of performance models (traffic_gen, at_bus, dram_ctrl, perf_stats) once for every combination of parameter values, and collects metrics from each run's statistics. Run it with \"VP Studio: Run Performance Sweep\" or vp-run --perf-sweep.",
+  "type": "object",
+  "required": ["platform", "sweep"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "platform": { "type": "string", "description": "The platform file, relative to this file." },
+    "description": { "type": "string" },
+    "sweep": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Parameters to vary. Every combination is run; the first parameter changes slowest.",
+      "items": {
+        "type": "object",
+        "required": ["param", "values"],
+        "additionalProperties": false,
+        "properties": {
+          "param": { "type": "string", "pattern": "^[^.]+(\\.[^.]+)*\\.[^.]+$", "description": "<module>.<parameter>, e.g. cpu.max_outstanding (a module in a subsystem: periph.dma.rate_mbps). One QoS setting of an at_bus: <bus>.masters.<master>.<key>, e.g. mau0.masters.display.min_mbps (keys priority, max_mbps, min_mbps, outstanding, window_ns; 0 for max_mbps or min_mbps turns it off); it changes that setting in the bus's masters text." },
+          "values": { "type": "array", "minItems": 1, "items": { "type": ["number", "string", "boolean"] }, "description": "Values to run with." }
+        }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "description": "Numbers to collect from each run: <section>.<name>.<field>…, section initiators, buses or memories, name the label or module name. For example initiators.cpu.latencyNs.p99, initiators.display.bandwidthMBps, memories.ddr.rowHitRate, memories.ddr.dataBusUtilization, buses.bus.waitNs.cpu.p99, buses.mau0.masters.display.urgentGrants. Empty: every initiator's bandwidth and latency and every memory's bandwidth and row hit rate.",
+      "items": { "type": "string" }
+    },
+    "checks": {
+      "type": "array",
+      "description": "Limits for CI: a check fails when the metric is outside min..max in a run it applies to. vp-run exits with 1 when one fails.",
+      "items": {
+        "type": "object",
+        "required": ["metric"],
+        "additionalProperties": false,
+        "properties": {
+          "metric": { "type": "string" },
+          "min": { "type": "number" },
+          "max": { "type": "number" },
+          "where": { "type": "object", "description": "Only runs with these swept values, e.g. {\"bus.arbitration\": \"priority\"}.", "additionalProperties": { "type": ["number", "string", "boolean"] } }
+        }
+      }
+    },
+    "jobs": { "type": "integer", "minimum": 1, "description": "Runs at the same time (default: half the CPUs)." },
+    "timeoutSeconds": { "type": "number", "minimum": 1, "description": "Limit for each run, in seconds of real time (default 600)." }
+  }
+}

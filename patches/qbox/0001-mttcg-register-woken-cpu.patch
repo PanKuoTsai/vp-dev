@@ -1,0 +1,92 @@
+From: VP Studio
+Subject: [PATCH] qemu-cpu: register a woken MTTCG CPU's quantum keeper from the waker
+
+In MTTCG mode a CPU that goes to sleep (WFI) stops its quantum keeper in
+wait_for_work(), which detaches its suspending channel from SystemC. When
+another CPU wakes it (kick_cb -> set_signaled), the quantum keeper was only
+restarted once the woken vCPU thread ran again. If the waker went to sleep
+straight away (Linux stop_machine: send an IPI, then WFI), there was a window
+with no suspending channel, no timed event and no pending async update, and
+SystemC ended the simulation by starvation. The wake-up itself was not lost.
+
+Seen booting Linux on the Ubuntu AArch64 platform with 2 or more CPUs that
+start powered off and no keep_alive module: about half of the boots, and up to
+10 in 11 under load, end 12 to 17 s after SC_START with no kernel output, at
+"alternatives: patching kernel code".
+
+Restart the quantum keeper in set_signaled(), under m_signaled_lock, when it
+was stopped for sleeping, and in wait_for_work() stop it under the same lock
+only when no wake-up is pending. A wake-up then either comes before the stop
+(the quantum keeper keeps running) or after it (the waker restarts it). Kicks
+to a running CPU do nothing more than before. Single-threaded TCG and
+coroutine mode are unchanged.
+
+diff --git a/qemu-components/common/include/cpu.h b/qemu-components/common/include/cpu.h
+index 214249a..49815cd 100644
+--- a/qemu-components/common/include/cpu.h
++++ b/qemu-components/common/include/cpu.h
+@@ -161,6 +161,11 @@ protected:
+     std::atomic<bool> m_signaled;
+     std::mutex m_signaled_lock;
+     std::condition_variable m_signaled_cond;
++    /*
++     * MTTCG: the quantum keeper was stopped because this CPU went to sleep in
++     * wait_for_work(). Protected by m_signaled_lock.
++     */
++    bool m_qk_stopped_for_sleep = false;
+ 
+     std::shared_ptr<gs::tlm_quantumkeeper_extended> m_qk;
+     std::atomic<bool> m_finished = false;
+@@ -278,6 +283,19 @@ protected:
+         assert(!m_coroutines);
+         if (m_inst.get_tcg_mode() != QemuInstance::TCG_SINGLE) {
+             std::lock_guard<std::mutex> lock(m_signaled_lock);
++            /*
++             * Restart the quantum keeper of a sleeping CPU here, in the thread
++             * that wakes it, rather than when the woken CPU thread gets to run
++             * again. Otherwise, if the waker goes to sleep at once (Linux
++             * stop_machine: send an IPI, then WFI), there is a window in which
++             * no CPU has a suspending channel attached and nothing else keeps
++             * SystemC busy, and the simulation ends by starvation although a
++             * CPU was just woken up.
++             */
++            if (m_qk_stopped_for_sleep && !m_finished) {
++                m_qk->start();
++                m_qk_stopped_for_sleep = false;
++            }
+             m_signaled = true;
+             m_signaled_cond.notify_all();
+         } else {
+@@ -349,16 +367,30 @@ protected:
+     void wait_for_work()
+     {
+         SCP_TRACE(())("Wait for work");
+-        m_qk->stop();
++        const bool mttcg = !m_coroutines && m_inst.get_tcg_mode() != QemuInstance::TCG_SINGLE;
++        /* In MTTCG mode the QK is stopped below, under m_signaled_lock. */
++        if (!mttcg || m_finished) m_qk->stop();
+         if (m_finished) return;
+ 
+         if (m_coroutines) {
+             m_on_sysc.run_on_sysc([this]() { wait(m_external_ev); });
+         } else {
+-            if (m_inst.get_tcg_mode() != QemuInstance::TCG_SINGLE) {
++            if (mttcg) {
+                 std::unique_lock<std::mutex> lock(m_signaled_lock);
++                /*
++                 * Stop the QK only if no wake-up is pending, and remember why,
++                 * so that set_signaled() restarts it from the waking thread.
++                 * Both run under m_signaled_lock, so a wake-up either comes
++                 * before (the QK keeps running) or after the stop (the waker
++                 * restarts it); the CPU is never awake without its QK.
++                 */
++                if (!m_signaled) {
++                    m_qk->stop();
++                    m_qk_stopped_for_sleep = true;
++                }
+                 m_signaled_cond.wait(lock, [this] { return m_signaled || m_finished; });
+                 m_signaled = false;
++                m_qk_stopped_for_sleep = false;
+             } else {
+                 std::unique_lock<std::mutex> lock(m_inst.g_signaled_lock);
+                 m_inst.g_signaled_cond.wait(lock, [this] { return m_inst.g_signaled || m_finished; });

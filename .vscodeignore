@@ -1,0 +1,28 @@
+test/**
+CLAUDE.md
+.vscodeignore
+*.vsix
+tools/**
+# Sources and scripts users build on their machine (Build Sim Agent, Build Model,
+# the pinned QBox); never the build outputs.
+!tools/model-build/**
+!tools/qbox-catalog/build.sh
+!tools/qbox-catalog/qbox_catalog.cc
+!tools/qbox-catalog/hints.json
+!tools/sim-agent/build.sh
+!tools/sim-agent/sim_agent.cc
+!tools/sim-agent/README.md
+!tools/vp-py/**
+!tools/gdb/**
+!tools/qbox-pin/**
+!tools/container/**
+!tools/askpass/**
+!tools/qbox-catalog/README.md
+.gitignore
+.claude/**
+.vscode/**
+theia/**
+
+# internal planning notes
+docs/**
+**/__pycache__/**

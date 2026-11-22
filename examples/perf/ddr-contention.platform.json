@@ -1,0 +1,52 @@
+{
+  "$schema": "../../schemas/qbox-platform.schema.json",
+  "schemaVersion": "0.2",
+  "name": "ddr-contention",
+  "description": "Architecture exploration example: a display, a DMA and a CPU cluster share one DDR4-3200 channel through an approximately-timed bus for 200 us of simulated time. No QEMU: the masters are traffic generators. Run with \"VP Studio: Run Performance Experiment\" or vp-run --perf; cpu-outstanding.perfsweep.json shows when the display loses bandwidth.",
+
+  "platform": {
+    "moduletype": "Container",
+    "params": { "quantum_ns": 1000 }
+  },
+
+  "modules": {
+    "display": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "Display controller: reads its frame buffer in order at 6000 MB/s, and must get that rate or the screen breaks up.",
+      "params": { "address": "0x0", "size": "0x2000000", "pattern": "sequential", "burst_bytes": 64, "rate_mbps": 6000, "max_outstanding": 16, "count": 0, "duration_ns": 200000, "qos": 2 },
+      "ports": { "initiator_socket": { "bind": "bus.target_socket" } }
+    },
+    "dma": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "DMA engine: 256-byte writes, up to 6000 MB/s; it takes what is left.",
+      "params": { "address": "0x8000000", "size": "0x4000000", "pattern": "sequential", "read_ratio": 0, "burst_bytes": 256, "rate_mbps": 6000, "max_outstanding": 4, "count": 0, "duration_ns": 200000, "seed": 2 },
+      "ports": { "initiator_socket": { "bind": "bus.target_socket" } }
+    },
+    "cpu": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "CPU cluster: cache-line misses to random addresses, 70% reads.",
+      "params": { "address": "0x10000000", "size": "0x10000000", "pattern": "random", "read_ratio": 0.7, "burst_bytes": 64, "max_outstanding": 4, "count": 0, "duration_ns": 200000, "seed": 3, "qos": 1 },
+      "ports": { "initiator_socket": { "bind": "bus.target_socket" } }
+    },
+    "bus": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "params": { "clock_mhz": 1000, "data_bytes": 16, "latency_cycles": 2, "arbitration": "round_robin", "target_queue": 8 }
+    },
+    "ddr": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "One DDR4-3200 channel, 64-bit, 16 banks, 8 KiB pages.",
+      "params": { "clock_mhz": 1600, "data_bytes": 8, "banks": 16, "row_bytes": 8192, "tRCD": 22, "tCL": 22, "tRP": 22, "scheduler": "fr_fcfs" },
+      "ports": { "target_socket": { "address": "0x0", "size": "0x40000000", "bind": "bus.initiator_socket" } }
+    },
+    "stats": {
+      "type": "perf_stats",
+      "dylib": "perf",
+      "params": { "output": "ddr-contention.perf.json" }
+    }
+  }
+}
