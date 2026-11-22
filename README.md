@@ -290,7 +290,9 @@ lib/webview/                 各面板的 HTML（平台檢視、追蹤、剖析�
   perfview.js                Performance 面板的 HTML
   cpuregsview.js             CPU Registers 檢視的 HTML
   qboxview.js                Build QBox 檢視的 HTML
-  webtheme.js                各 webview 共用的外觀：顏色、按鈕、輸入欄、表格、圖示
+  webtheme.js                各 webview 共用的外觀：圖示與 media/theme.css
+  media.js                   讀取 media/ 中的樣式表與頁面腳本，供各頁面內嵌
+media/                       各 webview 頁面的樣式表與頁面腳本：theme.css（共用）、<頁面>.css、<頁面>.js（platform、trace、profile、perf、qbox、cpuregs）；產生頁面時內嵌進帶 nonce 的 <style> 與 <script>
 lib/menu.js                  VP Studio 選單：指令分組與 when 條件（下拉選單、Actions 檢視、狀態列、獨立版選單列共用）
 catalog/registers/           隨附的暫存器描述（PL011、GICv3 distributor、virtio-mmio）
 prebuilt/                    版本庫內唯一的編譯產物：win32/vp-askpass.exe 與它的 SHA256SUMS（說明見 prebuilt/README.md）
