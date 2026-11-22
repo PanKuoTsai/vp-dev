@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const core = require('../lib/platform/core');
 const trace = require('../lib/analysis/trace');
-const { load } = require('./helpers');
+const { load, shipped } = require('./helpers');
 
 test('cpu registers: groups, PSTATE, changes, compact SIMD values, the view', () => {
   const cr = require('../lib/debug/cpuregs');
@@ -154,7 +154,7 @@ test('guest linux: loading the gdb script', () => {
   const py = fs.readFileSync(path.join(__dirname, '..', 'tools', 'gdb', 'vp-linux.py'), 'utf8');
   assert.strictEqual(/^VERSION = "(.*)"$/m.exec(py)[1], gl.SCRIPT_VERSION);
   for (const cmd of ['-vp-ps', '-vp-dmesg', '-vp-kaslr', '-vp-linux-version']) assert.ok(py.includes(`"${cmd}"`), cmd);
-  assert.match(fs.readFileSync(path.join(__dirname, '..', '.vscodeignore'), 'utf8'), /^!tools\/gdb\/\*\*$/m);
+  assert.ok(shipped('tools/gdb/vp-linux.py') && shipped('tools/gdb/README.md'));
 });
 
 test('third-party debuggers: gdbstub of the platform, TRACE32 script and guide', () => {

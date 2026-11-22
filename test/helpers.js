@@ -27,4 +27,17 @@ const extensionFiles = () => [path.join(__dirname, '..', 'extension.js'),
   .map((f) => [path.relative(path.join(__dirname, '..'), f), fs.readFileSync(f, 'utf8')]);
 const extensionSource = () => extensionFiles().map((f) => f[1]).join('\n');
 
-module.exports = { load, examplePath, workspace, catalog, exampleText, extensionFiles, extensionSource };
+/**
+ * Whether a file (path from the root, with "/") is in the packaged extension by
+ * .vscodeignore: left out when a pattern matches it, unless a "!" pattern
+ * matches it too. Knows "**", "*" and "?", which is all the file uses.
+ */
+function shipped(file) {
+  const toRe = (p) => new RegExp('^' + p.split(/(\*\*\/|\*\*|\*|\?)/).map((t) => (
+    t === '**/' ? '(.*/)?' : t === '**' ? '.*' : t === '*' ? '[^/]*' : t === '?' ? '[^/]' : t.replace(/[.+^$()|{}[\]\\]/g, '\\$&'))).join('') + '$');
+  const lines = fs.readFileSync(path.join(__dirname, '..', '.vscodeignore'), 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  const hit = (list) => list.some((p) => toRe(p).test(file));
+  return !hit(lines.filter((l) => !l.startsWith('!'))) || hit(lines.filter((l) => l.startsWith('!')).map((l) => l.slice(1)));
+}
+
+module.exports = { load, examplePath, workspace, catalog, exampleText, extensionFiles, extensionSource, shipped };

@@ -4,7 +4,7 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { extensionFiles, extensionSource } = require('./helpers');
+const { extensionFiles, extensionSource, shipped } = require('./helpers');
 
 test('settings that name this machine\'s programs and hosts are machine-overridable', () => {
   // In a VS Code Remote-SSH window the extension runs on the Linux machine; the
@@ -129,7 +129,7 @@ test('container-sshd.sh: valid shell, shipped, documented (INSTALL.md section 11
   const text = fs.readFileSync(script, 'utf8');
   // Keys only, forwarding for VP Studio's -L, the image's environment passed on.
   for (const line of ['PasswordAuthentication no', 'AllowTcpForwarding local', 'PermitUserEnvironment yes']) assert.ok(text.includes(line), line);
-  assert.match(fs.readFileSync(path.join(root, '.vscodeignore'), 'utf8'), /^!tools\/container\/\*\*$/m);
+  assert.ok(shipped('tools/container/container-sshd.sh'));
   const install = fs.readFileSync(path.join(root, 'INSTALL.md'), 'utf8');
   assert.match(install, /## 11\. Windows 電腦搭配 server 上的容器/);
   assert.match(install, /container-sshd\.sh --key/);

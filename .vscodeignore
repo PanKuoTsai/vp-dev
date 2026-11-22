@@ -2,22 +2,14 @@ test/**
 CLAUDE.md
 .vscodeignore
 *.vsix
-tools/**
-# Sources and scripts users build on their machine (Build Sim Agent, Build Model,
-# the pinned QBox); never the build outputs.
-!tools/model-build/**
-!tools/qbox-catalog/build.sh
-!tools/qbox-catalog/qbox_catalog.cc
-!tools/qbox-catalog/hints.json
-!tools/sim-agent/build.sh
-!tools/sim-agent/sim_agent.cc
-!tools/sim-agent/README.md
-!tools/vp-py/**
-!tools/gdb/**
-!tools/qbox-pin/**
-!tools/container/**
-!tools/askpass/**
-!tools/qbox-catalog/README.md
+# tools/ is shipped: users build the sim agent, the catalog tool, models and
+# the pinned QBox on their machine from these sources and scripts
+# (tools/README.md). Only what those builds write is left out, the same files
+# .gitignore names.
+tools/qbox-catalog/qbox-catalog
+tools/sim-agent/*.so
+tools/sim-agent/*.json
+tools/*/build/**
 .gitignore
 .gitattributes
 .github/**

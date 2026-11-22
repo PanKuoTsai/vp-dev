@@ -85,6 +85,9 @@ patches/qbox/                套用在釘選 QBox 上的修補，與送上游的
 theia/                       獨立版：Theia 的桌面版與瀏覽器版、內建擴充套件清單、建置腳本
 tools/model-build/           建模精靈的模型：編譯、自我測試、元件目錄項目
 tools/container/             容器映像：Dockerfile、建置、執行與取出檔案的腳本
+tools/gdb/vp-linux.py        gdb 的 Linux 感知腳本（由擴充套件載入除錯工作階段）
+tools/askpass/               prebuilt/win32/vp-askpass.exe 的原始碼與建置腳本
+tools/README.md              tools/ 各資料夾的分類：在使用者機器上建置的、直接使用的、維護者用的；整個 tools/ 都隨套件出貨，只排除建置輸出
 qbox.pin.json                這一版測試過的 QBox commit
 schemas/qbox-platform.schema.json   平台描述 schema（0.1；0.2 加入子系統，0.1 檔案不需修改）
 schemas/qbox-model.schema.json      模型描述 schema
