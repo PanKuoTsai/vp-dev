@@ -2,7 +2,7 @@
   "name": "vp-studio",
   "displayName": "VP Studio",
   "description": "Configure, inspect, run and debug QBox-based virtual platforms from a JSON platform description.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "novatek",
   "repository": {
     "type": "git",

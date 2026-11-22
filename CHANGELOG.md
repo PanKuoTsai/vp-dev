@@ -4,6 +4,8 @@ VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangel
 
 ## 未發布
 
+## 0.2.3（2026-11-22）
+
 ### 修正
 
 - **效能面板**：執行或掃描根本無法進行時（結果資料夾無法建立或寫入），面板不再一直停在「Running」，而是顯示「Failed」與原因。按 Stop 與正常結束的行為不變。
@@ -17,6 +19,7 @@ VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangel
 ### 變更
 
 - **平台描述的 schema** 改為 JSON Schema draft-07，與其他三份一致；接受與拒絕的平台檔和之前相同。四份 schema 的 `$id` 統一為 `https://novatek.com.tw/vp-studio/schemas/<檔名>`。
+- **獨立版的檔名跟著版本**：AppImage 為 `VP-Studio-0.2.3-x86_64.AppImage`（以前固定為 0.2.0）。
 - **打包**：`tools/` 改為整個隨擴充套件出貨，只排除建置輸出；新增的工具檔不必再逐一登記。
 - **README** 精簡為概觀、安裝與使用，其餘章節移到 `docs/`（功能說明、驗證狀態、除錯、命令列與 CI、設定、專案結構）。
 - **原始碼的位置**（指令、設定與功能都不變）：

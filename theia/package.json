@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "vp-studio-theia",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "VP Studio as a standalone IDE, built with Eclipse Theia.",
   "workspaces": [
     "vp-studio-menu",
