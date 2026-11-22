@@ -72,3 +72,26 @@ test('schemas: the templates and the bundled register descriptions are valid', (
   port.size = size;
   assert.ok(platform(d));
 });
+
+test('schemas: a template names its schema by a path that holds here, and loses it when it is copied', () => {
+  // In templates/ the "$schema" line is a relative path, so an editor without VP Studio also finds
+  // the schema. It is only right where the template is: Create Example removes it from the copy
+  // (in a workspace, VP Studio gives the schema by the file's name).
+  const files = ['templates/ubuntu-aarch64.platform.json', ...fs.readdirSync(path.join(root, 'templates', 'perf')).map((f) => 'templates/perf/' + f)];
+  const byName = require('../package.json').contributes.jsonValidation.map((v) => [v.fileMatch.replace(/^\*/, ''), path.join(root, v.url)]);
+  let named = 0;
+  for (const f of files) {
+    const doc = read(f);
+    const expected = byName.find(([suffix]) => f.endsWith(suffix));
+    assert.ok(expected, `${f}: no schema for a file of this name`);
+    if (doc.$schema === undefined) continue;
+    named++;
+    assert.strictEqual(path.resolve(root, path.dirname(f), doc.$schema), path.resolve(expected[1]), f);
+  }
+  assert.ok(named >= 5);
+  // Both commands read a template, drop "$schema" and write the rest.
+  const ui = fs.readFileSync(path.join(root, 'src', 'examplesUi.js'), 'utf8');
+  assert.strictEqual((ui.match(/JSON\.parse\(await fs\.promises\.readFile\(/g) || []).length, 2);
+  assert.strictEqual((ui.match(/delete data\.\$schema;/g) || []).length, 2);
+  assert.ok(!/copyFile|fs\.cp\b|cpSync/.test(ui), 'a template copied as a file would keep its "$schema"');
+});
