@@ -58,7 +58,7 @@
 
 | 項目 | 狀態 |
 |---|---|
-| 產生器、分析、映像檔檢查、JSON 局部編輯、目錄檢查、sim agent 客戶端、參數表單、新增與刪除模組、連線、主機埠、磁碟映像鎖、交易追蹤、版本比對、執行中參數的輸入檢查與寫回平台、device tree 產生、Lua 運算式求值、子系統、建模精靈、外部 CPU 模組的 dylib 檢查、磁碟映像可用空間、Linux 感知、交付套件與 tar、存檔與還原、修補偵測、XML 與 IP-XACT 匯入、第三方除錯器設定、遠端模擬、EL3 開機檢查、函式進出追蹤 | 131 個單元測試通過（`npm test`）；產生器輸出與 Python 原型逐位元一致 |
+| 產生器、分析、映像檔檢查、JSON 局部編輯、目錄檢查、sim agent 客戶端、參數表單、新增與刪除模組、連線、主機埠、磁碟映像鎖、交易追蹤、版本比對、執行中參數的輸入檢查與寫回平台、device tree 產生、Lua 運算式求值、子系統、建模精靈、外部 CPU 模組的 dylib 檢查、磁碟映像可用空間、Linux 感知、交付套件與 tar、存檔與還原、修補偵測、XML 與 IP-XACT 匯入、第三方除錯器設定、遠端模擬、EL3 開機檢查、函式進出追蹤 | 180 個單元測試通過（`npm test`）；產生器輸出與 Python 原型逐位元一致 |
 | 參數表單的網頁行為 | 已在無頭 Firefox 中以腳本實際操作（選取、送出、重設、篩選、錯誤顯示、切換套用範圍、`gdb_port` 鎖定、重新渲染後還原選取、範圍、篩選與焦點）；使用者已在 VS Code 中使用（2026-11-14） |
 | sim agent（`tools/sim-agent`） | 已驗證（2026-11-14，Ubuntu AArch64 8 核心）：在 `login:` 暫停時打字客體無回應、主機 CPU 降到 0%，繼續後才出現；開機中隨機暫停與繼續 40 次全部確實凍結、無卡住；`lib/simagent.js` 對實際 agent 跑過連線、暫停、繼續、通知、參數列表 |
 | 暫停按鈕、狀態列、參數檢視（VS Code 介面） | 已驗證（2026-11-14，使用者以 F5 實測） |
@@ -263,6 +263,19 @@ lib/thirdparty.js            第三方除錯器：gdbstub 位址、TRACE32 腳�
 lib/remote.js                遠端模擬：ssh 指令、空閒埠、路徑對應、檔案檢查與上傳、終端機參數
 lib/askpass.js               遠端密碼登入：SSH_ASKPASS 伺服器與啟動程式（askpass-helper.js 由 ssh 執行，向 VP Studio 要密碼；Windows 用 lib/vp-askpass.exe，原始碼 tools/askpass/）
 lib/launch.js                啟動前的共用步驟：Lua 路徑、sim agent、snapshot、啟動前檢查、device tree、建置位置
+lib/dataflow.js              資料流：各 initiator 經 router 能到達的位址範圍，與能到達某個 target 的 initiator
+lib/restructure.js           平台重整：更換模組的模型（保留匯流排上的位置）、把模組收進子系統
+lib/dtcompare.js             device tree 預覽與比對：行差異、以 dtc 轉成同一形式後比較
+lib/perf.js                  效能分析：執行一次或參數掃描、讀取統計、挑指標、CI 門檻（擴充套件與 vp-run 共用）
+lib/perfview.js              Performance 面板的 HTML
+lib/qos.js                   at_bus 的 masters 參數：各 master 的 QoS 設定的解析與寫回
+lib/guestlinux.js            Linux 感知：經 CDT 對 tools/gdb/vp-linux.py 送指令、解讀結果
+lib/cpuregs.js               CPU 暫存器：分組、AArch64 PSTATE 解碼、上次停住後變動的值
+lib/cpuregsview.js           CPU Registers 檢視的 HTML
+lib/debugdap.js              OpenOCD 連接埠：在平台加入 debug_dap 模組、寫出 OpenOCD 設定
+lib/qboxsetup.js             建置 QBox：QBox 資料夾與建置目錄的狀態、建置設定、build-qbox.sh 的參數
+lib/qboxview.js              Build QBox 檢視的 HTML
+lib/webtheme.js              各 webview 共用的外觀：顏色、按鈕、輸入欄、表格、圖示
 bin/vp-run                   命令列執行與 CI 的入口：找 Node.js（含 VS Code 內建的）執行 vp-run.js
 bin/vp-run.js                命令列執行與 CI：主控台 expect/send、逾時、JUnit 報告
 tools/vp-py/vpstudio.py      sim agent 的 Python 用戶端（只用標準函式庫）

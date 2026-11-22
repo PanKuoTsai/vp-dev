@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "vp-studio-menu",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "The VP Studio menu in the menu bar of the standalone application. The menu itself is lib/menu.js of VP Studio.",
   "license": "UNLICENSED",
   "files": ["lib"],
