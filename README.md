@@ -293,7 +293,10 @@ schemas/qbox-model.schema.json      模型描述 schema
 schemas/qbox-registers.schema.json  暫存器描述 schema（catalog/registers/、工作區的 *.registers.json）
 examples/ipxact/simple_timer.xml    IP-XACT 匯入範例
 examples/ubuntu-aarch64.platform.json
-test/core.test.js            node test/core.test.js
+test/run.js                  執行全部測試（npm test）；node test/run.js core view 只跑指定的檔
+test/<主題>.test.js          各主題的測試，可單獨執行：node test/core.test.js
+test/harness.js              test、testAsync（非同步測試排在所有同步測試之後）
+test/helpers.js              多個測試檔共用的範例平台、元件目錄與暫存工作區
 CLAUDE.md                    給後續開發（含 Claude Code）的交接說明
 INSTALL.md                   安裝與第一次使用（給新使用者）
 ```
