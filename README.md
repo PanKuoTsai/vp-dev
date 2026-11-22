@@ -28,7 +28,7 @@ npx @vscode/vsce package --allow-missing-repository
 code --install-extension vp-studio-0.2.*.vsix   # vsce 依 package.json 的版本命名，例如 vp-studio-0.2.1.vsix
 ```
 
-方法二，開發模式：用 VS Code 開啟 `vp-studio` 資料夾，按 Ctrl+F5（不偵錯執行），會開一個載入此擴充套件的新視窗。按 F5（偵錯）在 VS Code 1.143.1 上偶爾會讓新視窗的擴充套件主機在啟動時當掉，與本擴充套件無關，見 CLAUDE.md。
+方法二，開發模式：用 VS Code 開啟 `vp-studio` 資料夾，按 Ctrl+F5（不偵錯執行），會開一個載入此擴充套件的新視窗。按 F5（偵錯）在 VS Code 1.143.1 上偶爾會讓新視窗的擴充套件主機在啟動時當掉，與本擴充套件無關。
 
 ## 使用
 
