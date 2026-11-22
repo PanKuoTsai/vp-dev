@@ -27,7 +27,11 @@ Options:
   The source scan also covers a model folder's `src` and `include`.
 
 Regenerate `catalog/qbox-catalog.json` whenever the pinned QBox commit
-changes. The catalog records the commit it was generated from.
+changes. The catalog records the commit it was generated from. It does not
+record the folders of the machine: where they would appear (`qbox.libdir`, the
+logs of types that could not be introspected, parameter defaults derived from
+the program's location) the tool writes `<qbox>`, `<libdir>`, `<qbox-catalog>`
+or `~` instead.
 
 ## How it works
 

@@ -4,7 +4,7 @@
   "qbox": {
     "commit": "adfde7985eefe806ebd40b43f2516a5ac5cb5e51",
     "dirty": true,
-    "libdir": "/home/gcpan/workspace/vp-dev/qbox/build"
+    "libdir": "<qbox>/build"
   },
   "libraryErrors": [],
   "modules": {
@@ -1305,7 +1305,7 @@
       "introspection": {
         "status": "failed",
         "reason": "killed by signal Aborted",
-        "log": "        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: node_exe_path CCI parameter is not set!\nIn file: /home/gcpan/workspace/vp-dev/qbox/systemc-components/component_constructor/include/component_constructor.h:43\n\nInfo: (I99) simulation aborted\n"
+        "log": "        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: node_exe_path CCI parameter is not set!\nIn file: <qbox>/systemc-components/component_constructor/include/component_constructor.h:43\n\nInfo: (I99) simulation aborted\n"
       },
       "hint": "Loads the shared library named by node_exe_path (and needs node_name) in its constructor, so it cannot be introspected without a real component."
     },
@@ -4912,7 +4912,7 @@
       "introspection": {
         "status": "failed",
         "reason": "killed by signal Aborted",
-        "log": "\n        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\nterminate called after throwing an instance of 'sc_core::sc_report'\n  what():  Error: cciutils.find_sc_obj: Unable to find platform.dep_reg_router.reg_router in sc_object platform.dep_reg_router\nIn file: /home/gcpan/workspace/vp-dev/qbox/systemc-components/common/src/cciutils.cc:39\n"
+        "log": "\n        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\nterminate called after throwing an instance of 'sc_core::sc_report'\n  what():  Error: cciutils.find_sc_obj: Unable to find platform.dep_reg_router.reg_router in sc_object platform.dep_reg_router\nIn file: <qbox>/systemc-components/common/src/cciutils.cc:39\n"
       },
       "hint": "Arguments are a container holding a reg_router and a gs_memory for the registers; not introspected."
     },
@@ -10570,7 +10570,7 @@
           {
             "name": "html_doc_template_dir_path",
             "type": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >",
-            "default": "/home/gcpan/workspace/vp-dev/vp-studio/tools/qbox-catalog/static",
+            "default": "<qbox-catalog>/static",
             "description": "path to a template directory where HTML document to call the REST API exist"
           },
           {
@@ -11457,7 +11457,7 @@
       "introspection": {
         "status": "failed",
         "reason": "killed by signal Aborted",
-        "log": "        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: py_module_dir and py_module_name parameters shouldn't be empty!\nIn file: /home/gcpan/workspace/vp-dev/qbox/systemc-components/python_binder/src/python_binder.cc:392\n\nInfo: (I99) simulation aborted\n"
+        "log": "        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: py_module_dir and py_module_name parameters shouldn't be empty!\nIn file: <qbox>/systemc-components/python_binder/src/python_binder.cc:392\n\nInfo: (I99) simulation aborted\n"
       },
       "hint": "Imports the Python module named by py_module_dir and py_module_name in its constructor, so it cannot be introspected without a real module."
     },

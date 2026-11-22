@@ -12,6 +12,21 @@ test('catalog: the bootable example has no problems', () => {
   assert.deepStrictEqual(catProblems(load()), []);
 });
 
+test('catalog: the bundled one names no folder of the machine it was made on', () => {
+  // It is committed and shipped. tools/qbox-catalog writes <qbox>, <libdir>, <qbox-catalog> and ~
+  // for the folders it knows (without_local_paths); a home folder must not get in any other way.
+  const found = [];
+  (function walk(v, at) {
+    if (typeof v === 'string') { if (/(^|[\s"'(=:])(\/home\/|\/Users\/|\/root\/|[A-Za-z]:[\\/]Users[\\/])/.test(v)) found.push(`${at}: ${v.slice(0, 120)}`); }
+    else if (v && typeof v === 'object') for (const k of Object.keys(v)) walk(v[k], `${at}.${k}`);
+  })(catalog, 'catalog');
+  assert.deepStrictEqual(found, []);
+  assert.match(catalog.qbox.libdir, /^<(qbox|libdir)>/);
+  // The tool does this itself when it writes a catalog.
+  const tool = require('fs').readFileSync(require('path').join(__dirname, '..', 'tools', 'qbox-catalog', 'qbox_catalog.cc'), 'utf8');
+  assert.match(tool, /catalog_file << without_local_paths\(o\.str\(\), src, libdir\);/);
+});
+
 test('catalog: Cortex-A53, A55 and Neoverse N2 exist, A73 does not', () => {
   for (const t of ['cpu_arm_cortexA53', 'cpu_arm_cortexA55', 'cpu_arm_neoverseN2']) {
     assert.ok(cat.moduleInfo(catalog, t), t);

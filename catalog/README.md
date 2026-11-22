@@ -22,5 +22,11 @@ tree had changes (`dirty`, which is true for a QBox with VP Studio's patches)
 and the build folder it read. `VP Studio: Check QBox Version` and the tests
 compare that commit with the pin.
 
+It names no folder of the machine it was made on: the tool writes `<qbox>` for
+the QBox sources, `<libdir>` for a build folder outside them, `<qbox-catalog>`
+for its own folder and `~` for the home folder. So `qbox.libdir` reads
+`<qbox>/build`, and a log line reads `In file: <qbox>/systemc-components/...`.
+A test checks the bundled catalog for home folders.
+
 Descriptions written by hand are elsewhere: the register descriptions in
 `registers/`, the tool's hints in `tools/qbox-catalog/hints.json`.

@@ -834,6 +834,69 @@ std::string tail(const std::string& s, size_t lines)
     return o;
 }
 
+/* The absolute form of a path, or the path itself when it cannot be resolved. */
+std::string real_path(const std::string& p)
+{
+    char* r = realpath(p.c_str(), nullptr);
+    if (!r) return p;
+    std::string s(r);
+    free(r);
+    return s;
+}
+
+/*
+ * The catalog text without the folders of the machine it was made on. A
+ * catalog is committed and shipped with VP Studio, and those folders show up
+ * in it: in qbox.libdir, in the logs of types that could not be introspected
+ * ("In file: /home/me/qbox/...") and in parameter defaults a module derives
+ * from where the program is. They are replaced by names:
+ *   <qbox>          the QBox sources (--qbox-src)
+ *   <libdir>        --libdir, when it is not inside the QBox sources
+ *   <qbox-catalog>  the folder of this program
+ *   ~               the home folder
+ * The text is JSON, so the paths are looked for as json_str writes them.
+ */
+std::string without_local_paths(std::string text, const std::string& src, const std::string& libdir)
+{
+    std::vector<std::pair<std::string, std::string>> names;
+    auto add = [&names](const std::string& path, const std::string& name) {
+        if (path.size() < 2) return; /* nothing, or "/" */
+        std::string quoted = json_str(path);
+        names.push_back({ quoted.substr(1, quoted.size() - 2), name });
+    };
+    std::string qbox = real_path(src);
+    std::string libs = real_path(libdir);
+    add(qbox, "<qbox>");
+    if (libs.compare(0, qbox.size() + 1, qbox + "/") != 0 && libs != qbox) add(libs, "<libdir>");
+    std::string exe = real_path("/proc/self/exe");
+    size_t slash = exe.rfind('/');
+    if (slash != std::string::npos && slash > 0) add(exe.substr(0, slash), "<qbox-catalog>");
+    if (const char* home = getenv("HOME")) add(real_path(home), "~");
+    /* The longest first: the home folder usually holds the others. */
+    std::sort(names.begin(), names.end(),
+              [](const std::pair<std::string, std::string>& a, const std::pair<std::string, std::string>& b) {
+                  return a.first.size() > b.first.size();
+              });
+    for (const auto& n : names) {
+        const std::string& path = n.first;
+        const std::string& name = n.second;
+        size_t at = 0;
+        while ((at = text.find(path, at)) != std::string::npos) {
+            /* Only the folder itself or something in it, not /home/me/qbox2 for /home/me/qbox. */
+            size_t end = at + path.size();
+            bool whole = end >= text.size() || text[end] == '/' || text[end] == '"' || text[end] == '\\' ||
+                         text[end] == ':' || text[end] == ' ' || text[end] == ')' || text[end] == '\'';
+            if (!whole) {
+                at = end;
+                continue;
+            }
+            text.replace(at, path.size(), name);
+            at += name.size();
+        }
+    }
+    return text;
+}
+
 int drive(const std::string& self, const std::string& src, const std::string& libdir, const std::string& out,
           const std::string& hints_file, int jobs, const std::set<std::string>& only)
 {
@@ -936,7 +999,7 @@ int drive(const std::string& self, const std::string& src, const std::string& li
     char date[32];
     std::strftime(date, sizeof date, "%Y-%m-%dT%H:%M:%SZ", std::gmtime(&now));
 
-    std::ofstream o(out);
+    std::ostringstream o;
     o << "{\n\"catalogVersion\":" << json_str(TOOL_VERSION) << ",\n\"generated\":" << json_str(date)
       << ",\n\"qbox\":{\"commit\":" << json_str(commit) << ",\"dirty\":" << (dirty.empty() ? "false" : "true")
       << ",\"libdir\":" << json_str(libdir) << "},\n\"libraryErrors\":[";
@@ -983,7 +1046,9 @@ int drive(const std::string& self, const std::string& src, const std::string& li
         first = false;
     }
     o << "\n}\n}\n";
-    o.close();
+    std::ofstream catalog_file(out);
+    catalog_file << without_local_paths(o.str(), src, libdir);
+    catalog_file.close();
 
     size_t ok = 0;
     for (auto& j : queue) ok += is_ok(j.result);
