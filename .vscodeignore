@@ -10,6 +10,10 @@ tools/qbox-catalog/qbox-catalog
 tools/sim-agent/*.so
 tools/sim-agent/*.json
 tools/*/build/**
+# The patches are shipped (build-qbox.sh applies them); the source two of them
+# are made from, and the tool that makes them, are for maintainers.
+patches/make-patches.js
+patches/*/src/**
 .gitignore
 .gitattributes
 .github/**

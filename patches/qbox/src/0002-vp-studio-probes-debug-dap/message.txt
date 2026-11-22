@@ -1,0 +1,24 @@
+From: VP Studio
+Subject: [PATCH] systemc-components: add VP Studio's probes and debug_dap
+
+VP Studio's SystemC models, built with QBox like its other components:
+
+- probes (build/probes.so): module types tracer and signal_tracer, the
+  transaction and signal probes VP Studio inserts into a platform when it
+  starts a simulation with tracing, and the trace store they share with the
+  sim agent (TraceStore, InitiatorNames). VP Studio's sim agent (sim_agent.so,
+  built by "VP Studio: Build Sim Agent") links to probes.so, so this patch is
+  needed before the agent can be built.
+- debug_dap (build/debug_dap.so): module type debug_dap, an OpenOCD
+  remote_bitbang JTAG port with an ADIv5 debug access port (AXI MEM-AP on the
+  platform's router, APB-AP with a ROM table, per-core external debug
+  registers and CTIs that halt and resume the CPUs), used by "Start
+  Simulation with OpenOCD Port".
+
+The shared singletons are defined in src/probes.cc, not inline in the header:
+QBox loads module libraries with RTLD_LOCAL, so inline ones would be
+duplicated in every library that includes probes.h.
+
+Nothing else in QBox changes; platforms that do not use these types are not
+affected.
+---

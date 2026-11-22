@@ -1,0 +1,11 @@
+diff --git a/systemc-components/CMakeLists.txt b/systemc-components/CMakeLists.txt
+index 058568d8..51f93949 100644
+--- a/systemc-components/CMakeLists.txt
++++ b/systemc-components/CMakeLists.txt
+@@ -60,3 +60,6 @@ if(ENABLE_DRAGONWING)
+         endforeach()
+     endforeach()
+ endif()
++
++# VP Studio: architecture exploration (traffic generators, AT bus, DRAM controller).
++add_subdirectory(perf)

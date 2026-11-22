@@ -1,6 +1,7 @@
 'use strict';
 // Run with: node test/pin.test.js (every file: npm test)
 const { test } = require('./harness');
+const { shipped } = require('./helpers');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
@@ -125,5 +126,5 @@ test('pin: whether the pinned patches are applied, without git', () => {
   const agent = fs.readFileSync(path.join(__dirname, '..', 'tools', 'sim-agent', 'sim_agent.cc'), 'utf8');
   assert.ok(agent.includes('dlsym(h, "libqemu_device_vmstate")'));
   // The patches ship in the .vsix (build-qbox.sh and Check QBox Version read them there).
-  assert.doesNotMatch(fs.readFileSync(path.join(__dirname, '..', '.vscodeignore'), 'utf8'), /^patches/m);
+  for (const f of p.qbox.patches.concat(p.libqemu.patches)) assert.ok(shipped(f), f);
 });

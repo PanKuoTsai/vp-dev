@@ -10,6 +10,29 @@ the pinned commit moves to a QBox that contains a fix, remove the patch from
 `qbox.pin.json` and delete the file. 0002 and 0003 are VP Studio's own
 components and stay patches.
 
+## Changing 0002 or 0003
+
+These two add whole components, so they are kept as source in
+[`src/`](src), one folder for each patch:
+
+| In `src/<patch>/` | What |
+|---|---|
+| `tree/` | The files the patch adds, at their path in QBox (`tree/systemc-components/perf/src/perf.cc`). Edit these. |
+| `changes.diff` | The patch's changes to files QBox already has (two lines of `systemc-components/CMakeLists.txt`). |
+| `message.txt` | The head of the patch: From, Subject and the description. |
+
+The `.patch` file is made from them and committed with them:
+
+```sh
+node patches/make-patches.js           # write 0002 and 0003
+node patches/make-patches.js --check   # only say whether they are up to date
+```
+
+`build-qbox.sh` and `qbox.pin.json` use the `.patch` files as before; nothing
+reads `src/` when QBox is built. `npm test` fails when a patch is not what its
+source gives (`test/patches.test.js`). 0001 has no source folder: it changes
+QBox's own code and is edited as a patch.
+
 | Patch | Fixes | Status |
 |---|---|---|
 | `0001-mttcg-register-woken-cpu.patch` | Multi-CPU MTTCG platforms sometimes end right after `SC_START` with no output (VP Studio known issue K-01). | Verified 2026-11-15 (boots and QBox's 415 tests), see below. Draft report ready, not yet sent. |

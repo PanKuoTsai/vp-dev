@@ -1,0 +1,23 @@
+From: VP Studio
+Subject: [PATCH] systemc-components: add VP Studio's perf models
+
+VP Studio's architecture exploration models, built with QBox like its other
+components (build/perf.so; platforms name it: dylib_path = "perf"):
+
+- traffic_gen: an approximately-timed (nb_transport) initiator that issues
+  reads and writes by a pattern (sequential, random, stride; read ratio,
+  burst size, rate, transactions in flight, QoS) or from a list.
+- at_bus: an AT interconnect with round-robin, priority or FCFS arbitration,
+  a request and a response channel and a pipeline latency; targets bind
+  with an address and size as on QBox's router. A shared bus or a
+  crossbar; one at_bus may sit behind another (a memory controller front
+  end behind a system bus). QoS per master (masters): priority, bandwidth
+  limit, reserved bandwidth, accesses in flight.
+- dram_ctrl: an AT DRAM controller (banks, open rows, tRCD/tCL/tRP,
+  refresh, a shared data bus, FR-FCFS or FCFS, open or closed page,
+  optional scheduling by the bus's QoS class).
+- perf_stats: writes the statistics as JSON when every traffic_gen is done.
+
+They model time only and store no data. Applies after
+0002-vp-studio-probes-debug-dap.patch.
+---

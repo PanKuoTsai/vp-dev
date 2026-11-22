@@ -1,0 +1,14 @@
+diff --git a/systemc-components/CMakeLists.txt b/systemc-components/CMakeLists.txt
+index 8248f32b..058568d8 100644
+--- a/systemc-components/CMakeLists.txt
++++ b/systemc-components/CMakeLists.txt
+@@ -15,6 +15,9 @@ add_subdirectory(timeprinter)
+ add_subdirectory(tlm_bus_width_bridges)
+ add_subdirectory(uart)
+ add_subdirectory(write_gpio)
++# VP Studio: probes (transaction and signal tracing) and the OpenOCD debug port.
++add_subdirectory(probes)
++add_subdirectory(debug_dap)
+ add_subdirectory(realtimelimiter)
+ add_subdirectory(dmi_converter)
+ add_subdirectory(monitor)

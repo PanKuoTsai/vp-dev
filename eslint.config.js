@@ -6,7 +6,7 @@ const js = require('@eslint/js');
 const globals = require('globals');
 
 module.exports = [
-  { ignores: ['node_modules/', 'theia/', '**/build/', 'catalog/', 'examples/', 'templates/', 'patches/', 'prebuilt/'] },
+  { ignores: ['node_modules/', 'theia/', '**/build/', 'catalog/', 'examples/', 'templates/', 'prebuilt/'] },
   js.configs.recommended,
   {
     // The extension, the command line, the libraries and the tests run in Node.js.

@@ -1,0 +1,1586 @@
+/*
+ * perf: architecture exploration models for VP Studio. See perf.h and
+ * README.md.
+ *
+ * Every connection is TLM-2.0 approximately timed (nb_transport, base
+ * protocol): one BEGIN_REQ at a time on each hop until its END_REQ, and the
+ * response ends with BEGIN_RESP answered TLM_COMPLETED. The models store no
+ * data; they model time only.
+ */
+#include "perf.h"
+
+#include <cci_configuration>
+#include <module_factory_registery.h>
+#include <scp/report.h>
+#include <tlm_sockets_buswidth.h>
+#include <tlm_utils/multi_passthrough_initiator_socket.h>
+#include <tlm_utils/multi_passthrough_target_socket.h>
+#include <tlm_utils/peq_with_get.h>
+#include <tlm_utils/simple_initiator_socket.h>
+#include <tlm_utils/simple_target_socket.h>
+
+#include <algorithm>
+#include <cmath>
+#include <cstdio>
+#include <cctype>
+#include <deque>
+#include <functional>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+
+using sc_core::sc_time;
+using sc_core::SC_NS;
+using sc_core::SC_ZERO_TIME;
+using sc_core::sc_time_stamp;
+
+static const int BW = DEFAULT_TLM_BUSWIDTH;
+
+static double now_ns() { return sc_time_stamp().to_seconds() * 1e9; }
+static sc_time ns(double v) { return sc_time(v < 0 ? 0 : v, SC_NS); }
+static std::string base_name(const std::string& n) { auto p = n.find_last_of('.'); return p == std::string::npos ? n : n.substr(p + 1); }
+
+/* ---------------------------------------------------------------- statistics */
+
+double PerfSamples::percentile(double p)
+{
+    if (ns.empty()) return 0;
+    std::sort(ns.begin(), ns.end());
+    double r = p / 100.0 * (ns.size() - 1);
+    size_t lo = (size_t)std::floor(r), hi = (size_t)std::ceil(r);
+    return ns[lo] + (ns[hi] - ns[lo]) * (r - lo);
+}
+
+double PerfSamples::mean() const
+{
+    if (ns.empty()) return 0;
+    double s = 0;
+    for (double v : ns) s += v;
+    return s / ns.size();
+}
+
+PerfStats& PerfStats::get()
+{
+    static PerfStats s;
+    return s;
+}
+
+int PerfStats::add_gen(const std::string& name, const std::string& label)
+{
+    gens.emplace_back();
+    gens.back().name = name;
+    gens.back().label = label.empty() ? base_name(name) : label;
+    return (int)gens.size() - 1;
+}
+
+int PerfStats::add_bus(const std::string& name)
+{
+    buses.emplace_back();
+    buses.back().name = name;
+    return (int)buses.size() - 1;
+}
+
+int PerfStats::add_mem(const std::string& name)
+{
+    mems.emplace_back();
+    mems.back().name = name;
+    return (int)mems.size() - 1;
+}
+
+bool PerfStats::all_done() const
+{
+    if (gens.empty()) return false;
+    for (auto& g : gens)
+        if (!g.done) return false;
+    return true;
+}
+
+void PerfStats::gen_done(int i)
+{
+    gens[i].done = true;
+    if (!all_done()) return;
+    std::cout << summary() << std::flush;
+    if (!output.empty()) write_now(true);
+    if (stop_when_done && !output.empty()) sc_core::sc_stop();
+}
+
+static std::string jstr(const std::string& s)
+{
+    std::string o = "\"";
+    for (char c : s) {
+        if (c == '"' || c == '\\') o += '\\', o += c;
+        else if ((unsigned char)c < 0x20) { char b[8]; snprintf(b, sizeof b, "\\u%04x", c); o += b; }
+        else o += c;
+    }
+    return o + "\"";
+}
+
+static std::string jnum(double v)
+{
+    if (!std::isfinite(v)) return "0";
+    std::ostringstream o;
+    o << std::setprecision(10) << v;
+    return o.str();
+}
+
+static std::string jlat(PerfSamples& s)
+{
+    std::ostringstream o;
+    o << "{\"count\":" << s.ns.size() << ",\"mean\":" << jnum(s.mean());
+    if (!s.ns.empty()) {
+        o << ",\"min\":" << jnum(s.percentile(0)) << ",\"p50\":" << jnum(s.percentile(50))
+          << ",\"p90\":" << jnum(s.percentile(90)) << ",\"p99\":" << jnum(s.percentile(99))
+          << ",\"max\":" << jnum(s.percentile(100));
+        // Histogram with 1-2-5 bucket edges, the last bucket open.
+        std::vector<double> edges;
+        double top = s.percentile(100);
+        for (double d = 1; d < 1e12 && (edges.empty() || edges.back() <= top); d *= 10)
+            for (double m : { 1.0, 2.0, 5.0 }) edges.push_back(d * m);
+        std::vector<uint64_t> counts(edges.size(), 0);
+        for (double v : s.ns) {
+            size_t k = std::upper_bound(edges.begin(), edges.end(), v) - edges.begin();
+            counts[std::min(k, counts.size() - 1)]++;
+        }
+        while (counts.size() > 1 && counts.back() == 0) counts.pop_back(), edges.pop_back();
+        o << ",\"histogram\":{\"upperNs\":[";
+        for (size_t i = 0; i < edges.size(); i++) o << (i ? "," : "") << jnum(edges[i]);
+        o << "],\"counts\":[";
+        for (size_t i = 0; i < counts.size(); i++) o << (i ? "," : "") << counts[i];
+        o << "]}";
+    }
+    return o.str() + "}";
+}
+
+std::string PerfStats::json(bool complete)
+{
+    double t = now_ns();
+    std::ostringstream o;
+    o << "{\"format\":\"vp-perf-stats\",\"version\":1,\"perfVersion\":" << jstr(PERF_VERSION)
+      << ",\"complete\":" << (complete ? "true" : "false") << ",\"simTimeNs\":" << jnum(t) << ",\"initiators\":[";
+    for (size_t i = 0; i < gens.size(); i++) {
+        auto& g = gens[i];
+        double span = g.first_issue_ns < 0 ? 0 : g.last_done_ns - g.first_issue_ns;
+        o << (i ? "," : "") << "{\"name\":" << jstr(g.name) << ",\"label\":" << jstr(g.label)
+          << ",\"issued\":" << g.issued << ",\"reads\":" << g.reads << ",\"writes\":" << g.writes
+          << ",\"errors\":" << g.errors << ",\"firstError\":" << jstr(g.first_error)
+          << ",\"bytes\":" << g.bytes << ",\"firstIssueNs\":" << jnum(g.first_issue_ns < 0 ? 0 : g.first_issue_ns)
+          << ",\"lastDoneNs\":" << jnum(g.last_done_ns)
+          << ",\"bandwidthMBps\":" << jnum(span > 0 ? g.bytes / span * 1e3 : 0) << ",\"latencyNs\":" << jlat(g.latency)
+          << ",\"done\":" << (g.done ? "true" : "false") << "}";
+    }
+    o << "],\"buses\":[";
+    for (size_t i = 0; i < buses.size(); i++) {
+        auto& b = buses[i];
+        // A crossbar has a channel per target and per initiator: its use is that of the busiest one.
+        auto busiest = [](const std::map<std::string, double>& m, double all) {
+            double x = 0;
+            for (auto& c : m) x = std::max(x, c.second);
+            return m.empty() ? all : x;
+        };
+        auto chans = [&](const std::map<std::string, double>& m) {
+            std::ostringstream s;
+            size_t k = 0;
+            for (auto& c : m) s << (k++ ? "," : "") << jstr(c.first) << ":" << jnum(t > 0 ? c.second / t : 0);
+            return s.str();
+        };
+        o << (i ? "," : "") << "{\"name\":" << jstr(b.name) << ",\"topology\":" << jstr(b.topology.empty() ? "shared" : b.topology)
+          << ",\"requestBusyNs\":" << jnum(b.req_busy_ns) << ",\"responseBusyNs\":" << jnum(b.resp_busy_ns)
+          << ",\"requestUtilization\":" << jnum(t > 0 ? busiest(b.req_channels, b.req_busy_ns) / t : 0)
+          << ",\"responseUtilization\":" << jnum(t > 0 ? busiest(b.resp_channels, b.resp_busy_ns) / t : 0)
+          << ",\"channels\":{\"request\":{" << chans(b.req_channels) << "},\"response\":{" << chans(b.resp_channels) << "}}"
+          << ",\"waitNs\":{";
+        size_t k = 0;
+        for (auto& w : b.wait) o << (k++ ? "," : "") << jstr(w.first) << ":" << jlat(w.second);
+        o << "},\"masters\":{";
+        k = 0;
+        for (auto& m : b.masters)
+            o << (k++ ? "," : "") << jstr(m.first) << ":{\"bytes\":" << m.second.bytes
+              << ",\"bandwidthMBps\":" << jnum(t > 0 ? m.second.bytes / t * 1e3 : 0) << ",\"grants\":" << m.second.grants
+              << ",\"urgentGrants\":" << m.second.urgent << ",\"limitedGrants\":" << m.second.limited
+              << ",\"limitWaitNs\":" << jnum(m.second.limit_wait_ns) << ",\"responseWaitNs\":" << jlat(m.second.resp_wait)
+              << ",\"qos\":" << jstr(m.second.qos) << "}";
+        o << "}}";
+    }
+    o << "],\"memories\":[";
+    for (size_t i = 0; i < mems.size(); i++) {
+        auto& m = mems[i];
+        uint64_t n = m.row_hits + m.row_misses + m.row_conflicts;
+        o << (i ? "," : "") << "{\"name\":" << jstr(m.name) << ",\"reads\":" << m.reads << ",\"writes\":" << m.writes
+          << ",\"bytes\":" << m.bytes << ",\"rowHits\":" << m.row_hits << ",\"rowMisses\":" << m.row_misses
+          << ",\"rowConflicts\":" << m.row_conflicts << ",\"rowHitRate\":" << jnum(n ? (double)m.row_hits / n : 0)
+          << ",\"refreshes\":" << m.refreshes << ",\"dataBusyNs\":" << jnum(m.data_busy_ns)
+          << ",\"dataBusUtilization\":" << jnum(t > 0 ? m.data_busy_ns / t : 0)
+          << ",\"bandwidthMBps\":" << jnum(t > 0 ? m.bytes / t * 1e3 : 0) << ",\"serviceNs\":" << jlat(m.service)
+          << "}";
+    }
+    o << "]}\n";
+    return o.str();
+}
+
+std::string PerfStats::summary()
+{
+    std::ostringstream o;
+    o << std::fixed << std::setprecision(1);
+    for (auto& g : gens) {
+        double span = g.first_issue_ns < 0 ? 0 : g.last_done_ns - g.first_issue_ns;
+        o << "perf: " << g.label << " " << g.reads << " reads " << g.writes << " writes, "
+          << (span > 0 ? g.bytes / span * 1e3 : 0) << " MB/s, latency mean " << g.latency.mean() << " ns p99 "
+          << g.latency.percentile(99) << " ns";
+        if (g.errors) o << "; " << g.errors << " FAILED (" << g.first_error << ")";
+        o << "\n";
+    }
+    for (auto& m : mems) {
+        uint64_t n = m.row_hits + m.row_misses + m.row_conflicts;
+        double t = now_ns();
+        o << "perf: " << m.name << " " << (t > 0 ? m.bytes / t * 1e3 : 0) << " MB/s, data bus "
+          << (t > 0 ? 100 * m.data_busy_ns / t : 0) << "% busy, row hits " << (n ? 100.0 * m.row_hits / n : 0)
+          << "%\n";
+    }
+    return o.str();
+}
+
+void PerfStats::write_now(bool complete)
+{
+    if (output.empty()) return;
+    std::ofstream f(output);
+    if (!f) {
+        std::cerr << "perf: cannot write " << output << "\n";
+        return;
+    }
+    f << json(complete);
+    written = true;
+    std::cout << "perf: statistics written to " << output << "\n" << std::flush;
+}
+
+/* ---------------------------------------------------------------- traffic_gen */
+
+/** Payloads with a PerfTag, reused. */
+class PayloadPool : public tlm::tlm_mm_interface
+{
+public:
+    tlm::tlm_generic_payload* get()
+    {
+        tlm::tlm_generic_payload* p;
+        if (m_free.empty()) {
+            m_all.emplace_back(new tlm::tlm_generic_payload(this));
+            p = m_all.back().get();
+            p->set_extension(new PerfTag);
+        } else {
+            p = m_free.back();
+            m_free.pop_back();
+        }
+        return p;
+    }
+    void free(tlm::tlm_generic_payload* p) override
+    {
+        p->reset();
+        m_free.push_back(p);
+    }
+
+private:
+    std::vector<std::unique_ptr<tlm::tlm_generic_payload>> m_all;
+    std::vector<tlm::tlm_generic_payload*> m_free;
+};
+
+/**
+ * traffic_gen: issues reads and writes through an AT initiator socket, by a
+ * pattern (sequential, random or strided addresses in a range, a read ratio,
+ * a burst size, a rate) or from a list (replay: time_ns,R|W,address,length).
+ * It keeps at most max_outstanding transactions in flight and records the
+ * latency of each (issue to response).
+ */
+class traffic_gen : public sc_core::sc_module
+{
+    SCP_LOGGER();
+
+public:
+    tlm_utils::simple_initiator_socket<traffic_gen, BW> initiator_socket;
+    cci::cci_param<uint64_t> p_address;
+    cci::cci_param<uint64_t> p_size;
+    cci::cci_param<std::string> p_pattern;
+    cci::cci_param<uint64_t> p_stride;
+    cci::cci_param<double> p_read_ratio;
+    cci::cci_param<uint32_t> p_burst;
+    cci::cci_param<double> p_rate;
+    cci::cci_param<uint32_t> p_outstanding;
+    cci::cci_param<uint64_t> p_count;
+    cci::cci_param<double> p_start;
+    cci::cci_param<double> p_duration;
+    cci::cci_param<uint32_t> p_seed;
+    cci::cci_param<uint32_t> p_qos;
+    cci::cci_param<std::string> p_replay;
+    cci::cci_param<std::string> p_label;
+
+    explicit traffic_gen(const sc_core::sc_module_name& n)
+        : sc_core::sc_module(n)
+        , initiator_socket("initiator_socket")
+        , p_address("address", 0, "First address of the range the accesses fall in")
+        , p_size("size", 0x10000000, "Size of the address range in bytes")
+        , p_pattern("pattern", "sequential", "Addresses: sequential, random or stride")
+        , p_stride("stride", 0, "Step between accesses for pattern stride, in bytes (0: the burst size)")
+        , p_read_ratio("read_ratio", 1.0, "Share of reads, 0 to 1 (the rest are writes)")
+        , p_burst("burst_bytes", 64, "Bytes per access")
+        , p_rate("rate_mbps", 0, "Offered load in MB/s (1 MB = 10^6 bytes); 0: as fast as max_outstanding allows")
+        , p_outstanding("max_outstanding", 4, "Most transactions in flight at once")
+        , p_count("count", 1000, "Number of accesses (0: until duration_ns)")
+        , p_start("start_ns", 0, "When to start, in ns")
+        , p_duration("duration_ns", 0, "Stop issuing after this long, in ns (0: no limit)")
+        , p_seed("seed", 1, "Seed for pattern random and for the read/write choice")
+        , p_qos("qos", 0, "Priority for at_bus arbitration \"priority\" (higher wins)")
+        , p_replay("replay", "",
+                   "A file of accesses to issue instead of the pattern: one per line, time_ns,R|W,address,length "
+                   "(# starts a comment)")
+        , p_label("label", "", "Name in the statistics (default: the module name)")
+        , m_done_peq("done_peq")
+    {
+        initiator_socket.register_nb_transport_bw(this, &traffic_gen::nb_transport_bw);
+        SC_THREAD(run);
+        SC_METHOD(on_done);
+        sensitive << m_done_peq.get_event();
+        dont_initialize();
+    }
+
+    void start_of_simulation() override { m_id = PerfStats::get().add_gen(name(), p_label.get_value()); }
+
+private:
+    struct Item {
+        double time_ns;
+        bool write;
+        uint64_t addr;
+        uint32_t len;
+    };
+
+    PayloadPool m_pool;
+    std::vector<unsigned char> m_buf;
+    int m_id = -1;
+    uint32_t m_outstanding = 0;
+    sc_core::sc_event m_resp_ev, m_end_req_ev;
+    bool m_end_req_seen = false;
+    sc_time m_end_req_time;
+    tlm::tlm_generic_payload* m_req = nullptr;
+    tlm_utils::peq_with_get<tlm::tlm_generic_payload> m_done_peq;
+    uint64_t m_rng = 1;
+    std::vector<Item> m_list;
+
+    uint64_t rnd()
+    {
+        m_rng ^= m_rng << 13;
+        m_rng ^= m_rng >> 7;
+        m_rng ^= m_rng << 17;
+        return m_rng;
+    }
+
+    void load_replay()
+    {
+        std::ifstream f(p_replay.get_value());
+        if (!f) SCP_FATAL(()) << "cannot read replay file " << p_replay.get_value();
+        std::string line;
+        while (std::getline(f, line)) {
+            auto h = line.find('#');
+            if (h != std::string::npos) line.resize(h);
+            std::replace(line.begin(), line.end(), ',', ' ');
+            std::istringstream s(line);
+            std::string t, rw, a, l;
+            if (!(s >> t >> rw >> a >> l)) continue;
+            if (!std::isdigit((unsigned char)t[0])) continue; // a header
+            Item it;
+            it.time_ns = std::stod(t);
+            it.write = rw[0] == 'W' || rw[0] == 'w';
+            it.addr = std::stoull(a, nullptr, 0);
+            it.len = (uint32_t)std::stoul(l, nullptr, 0);
+            m_list.push_back(it);
+        }
+    }
+
+    bool next(uint64_t k, Item& it)
+    {
+        double start = p_start.get_value();
+        if (!p_replay.get_value().empty()) {
+            if (k >= m_list.size()) return false;
+            it = m_list[k];
+            it.time_ns += start;
+            return true;
+        }
+        uint64_t count = p_count.get_value();
+        if (count && k >= count) return false;
+        double dur = p_duration.get_value();
+        if (dur > 0 && now_ns() >= start + dur) return false;
+        uint32_t len = std::max<uint32_t>(1, p_burst.get_value());
+        uint64_t size = std::max<uint64_t>(len, p_size.get_value());
+        uint64_t slots = size / len;
+        const std::string& pat = p_pattern.get_value();
+        uint64_t off;
+        if (pat == "random") off = (rnd() % slots) * len;
+        else if (pat == "stride") off = (k * (p_stride.get_value() ? p_stride.get_value() : len)) % (slots * len);
+        else off = (k % slots) * len;
+        it.addr = p_address.get_value() + off;
+        it.len = len;
+        it.write = (double)(rnd() % 1000000) / 1e6 >= p_read_ratio.get_value();
+        it.time_ns = p_rate.get_value() > 0 ? start + k * (len * 1e3 / p_rate.get_value()) : start;
+        return true;
+    }
+
+    void run()
+    {
+        m_rng = p_seed.get_value() ? p_seed.get_value() * 0x9E3779B97F4A7C15ull : 1;
+        if (!p_replay.get_value().empty()) load_replay();
+        else if (!p_count.get_value() && p_duration.get_value() <= 0)
+            SCP_FATAL(()) << "count and duration_ns are both 0: the generator would never stop";
+        uint32_t maxo = std::max<uint32_t>(1, p_outstanding.get_value());
+        Item it;
+        for (uint64_t k = 0; next(k, it); k++) {
+            if (it.time_ns > now_ns()) wait(ns(it.time_ns - now_ns()));
+            while (m_outstanding >= maxo) wait(m_resp_ev);
+            send(it);
+        }
+        while (m_outstanding) wait(m_resp_ev);
+        PerfStats::get().gen_done(m_id);
+    }
+
+    void send(const Item& it)
+    {
+        if (m_buf.size() < it.len) m_buf.resize(it.len);
+        auto* t = m_pool.get();
+        t->set_command(it.write ? tlm::TLM_WRITE_COMMAND : tlm::TLM_READ_COMMAND);
+        t->set_address(it.addr);
+        t->set_data_ptr(m_buf.data());
+        t->set_data_length(it.len);
+        t->set_streaming_width(it.len);
+        t->set_byte_enable_ptr(nullptr);
+        t->set_dmi_allowed(false);
+        t->set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
+        PerfTag* tag = nullptr;
+        t->get_extension(tag);
+        tag->gen = m_id;
+        tag->qos = p_qos.get_value();
+        tag->issued = sc_time_stamp();
+        tag->prio = -1;
+        tag->urgent = false;
+        auto& g = PerfStats::get().gen(m_id);
+        g.issued++;
+        if (g.first_issue_ns < 0) g.first_issue_ns = now_ns();
+        m_outstanding++;
+        t->acquire();
+        m_req = t;
+        m_end_req_seen = false;
+        tlm::tlm_phase ph = tlm::BEGIN_REQ;
+        sc_time d = SC_ZERO_TIME;
+        auto st = initiator_socket->nb_transport_fw(*t, ph, d);
+        if (st == tlm::TLM_ACCEPTED) {
+            while (!m_end_req_seen) wait(m_end_req_ev);
+            if (m_end_req_time > sc_time_stamp()) wait(m_end_req_time - sc_time_stamp());
+        } else if (st == tlm::TLM_UPDATED) {
+            if (ph == tlm::END_REQ) wait(d);
+            else if (ph == tlm::BEGIN_RESP) m_done_peq.notify(*t, d);
+        } else {
+            m_done_peq.notify(*t, d);
+        }
+        m_req = nullptr;
+    }
+
+    tlm::tlm_sync_enum nb_transport_bw(tlm::tlm_generic_payload& t, tlm::tlm_phase& ph, sc_time& d)
+    {
+        if (ph == tlm::END_REQ || (ph == tlm::BEGIN_RESP && &t == m_req)) {
+            m_end_req_seen = true;
+            m_end_req_time = sc_time_stamp() + d;
+            m_end_req_ev.notify(d);
+        }
+        if (ph == tlm::BEGIN_RESP) {
+            m_done_peq.notify(t, d);
+            return tlm::TLM_COMPLETED;
+        }
+        return tlm::TLM_ACCEPTED;
+    }
+
+    void on_done()
+    {
+        while (auto* t = m_done_peq.get_next_transaction()) {
+            PerfTag* tag = nullptr;
+            t->get_extension(tag);
+            auto& g = PerfStats::get().gen(m_id);
+            g.last_done_ns = now_ns();
+            if (t->get_response_status() != tlm::TLM_OK_RESPONSE) {
+                // A failed access moved no data: counted apart, so the bandwidth is not inflated.
+                if (!g.errors++) {
+                    std::ostringstream e;
+                    e << "access at 0x" << std::hex << t->get_address() << " failed: " << t->get_response_string();
+                    g.first_error = e.str();
+                    SCP_WARN(()) << g.first_error;
+                }
+            } else {
+                double lat = (sc_time_stamp() - tag->issued).to_seconds() * 1e9;
+                g.latency.add(lat);
+                if (t->is_write()) g.writes++;
+                else g.reads++;
+                g.bytes += t->get_data_length();
+            }
+            m_outstanding--;
+            t->release();
+            m_resp_ev.notify(SC_ZERO_TIME);
+        }
+    }
+};
+
+/* ---------------------------------------------------------------- at_bus */
+
+/** A multi initiator socket that tells its owner the name of each target bound to it. */
+template <typename MOD>
+class perf_spying_initiator_socket : public tlm_utils::multi_passthrough_initiator_socket<MOD, BW>
+{
+    using base = tlm_utils::multi_passthrough_initiator_socket<MOD, BW>;
+    std::function<void(std::string)> m_cb;
+
+public:
+    perf_spying_initiator_socket(const char* n, std::function<void(std::string)> cb): base(n), m_cb(cb) {}
+    void bind(typename base::base_target_socket_type& s)
+    {
+        base::bind(s);
+        m_cb(s.get_base_export().name());
+    }
+};
+
+/**
+ * at_bus: an approximately-timed interconnect, or the front end of a memory
+ * controller (a MAU). Initiators bind to target_socket, targets to
+ * initiator_socket with an address and size like on QBox's router (and
+ * relative_addresses: false to pass addresses on unchanged).
+ *
+ * topology "shared": one request channel (one cycle for the address plus the
+ * write data, data_bytes per cycle) and one response channel (one cycle plus
+ * the read data) for everyone. "crossbar": a request channel per target and a
+ * response channel per initiator port, so transfers to different targets, and
+ * to different initiators, overlap. latency_cycles is added in each
+ * direction; each target has a queue of target_queue requests.
+ *
+ * Each initiator port holds input_queue requests waiting for arbitration
+ * (1: the port is blocked until its request is granted). A bus behind
+ * another bus (a MAU behind a system bus) needs more, so that one master held
+ * back by its QoS does not block the others that share the port.
+ *
+ * masters sets QoS per master (traffic_gen, by module name or label; the
+ * master is known from the transaction, also behind another bus):
+ *   "display: priority=3 min_mbps=6000; cpu: max_mbps=8000 outstanding=8"
+ *   priority     replaces the traffic_gen's qos on this bus (arbitration
+ *                "priority"; higher wins)
+ *   max_mbps     bandwidth limit: a token bucket of max_mbps x window_ns
+ *                bytes; a request waits until the bucket holds its size
+ *   min_mbps     reserved bandwidth: while the master has used less than
+ *                min_mbps (a credit of min_mbps x window_ns bytes), its
+ *                requests and responses go before everyone else's
+ *   outstanding  most accesses of the master in flight through this bus
+ *   window_ns    the averaging window of max_mbps and min_mbps (1000)
+ * Responses go out in order of arrival, except that urgent ones (min_mbps)
+ * go first and, with arbitration "priority", higher priority goes first.
+ */
+class at_bus : public sc_core::sc_module
+{
+    SCP_LOGGER();
+
+public:
+    tlm_utils::multi_passthrough_target_socket<at_bus, BW> target_socket;
+    perf_spying_initiator_socket<at_bus> initiator_socket;
+    cci::cci_param<double> p_clock;
+    cci::cci_param<uint32_t> p_data_bytes;
+    cci::cci_param<uint32_t> p_latency;
+    cci::cci_param<std::string> p_arb;
+    cci::cci_param<uint32_t> p_target_queue;
+    cci::cci_param<std::string> p_masters;
+    cci::cci_param<std::string> p_topology;
+    cci::cci_param<uint32_t> p_input_queue;
+
+    explicit at_bus(const sc_core::sc_module_name& n)
+        : sc_core::sc_module(n)
+        , target_socket("target_socket")
+        , initiator_socket("initiator_socket", [this](std::string s) { m_targets.push_back({ s }); })
+        , p_clock("clock_mhz", 1000, "Bus clock in MHz")
+        , p_data_bytes("data_bytes", 16, "Bytes moved per cycle on each channel")
+        , p_latency("latency_cycles", 2, "Pipeline latency in each direction, in cycles")
+        , p_arb("arbitration", "round_robin",
+                "round_robin, priority (masters priority or traffic_gen qos, then round robin) or fcfs")
+        , p_target_queue("target_queue", 4, "Requests the bus holds for each target")
+        , p_masters("masters", "",
+                    "QoS per master, e.g. \"display: priority=3 min_mbps=6000; cpu: max_mbps=8000 outstanding=8\" "
+                    "(keys priority, max_mbps, min_mbps, outstanding, window_ns; a master is a traffic_gen's "
+                    "module name or label)")
+        , p_topology("topology", "shared",
+                     "shared (one request and one response channel) or crossbar (a request channel per target, a "
+                     "response channel per initiator port)")
+        , p_input_queue("input_queue", 1,
+                        "Requests each initiator port holds waiting for arbitration (1: the port waits until its "
+                        "request is granted; more for a bus behind another bus)")
+        , m_req_peq("req_peq")
+    {
+        target_socket.register_nb_transport_fw(this, &at_bus::fw);
+        target_socket.register_b_transport(this, &at_bus::b_transport);
+        initiator_socket.register_nb_transport_bw(this, &at_bus::bw);
+        SC_METHOD(on_request);
+        sensitive << m_req_peq.get_event();
+        dont_initialize();
+        SC_THREAD(arbiter);
+        SC_THREAD(responder);
+    }
+
+    void before_end_of_elaboration() override
+    {
+        auto broker = cci::cci_get_broker();
+        for (auto& t : m_targets) {
+            auto get = [&](const std::string& k, uint64_t d) -> uint64_t {
+                std::string key = t.name + "." + k;
+                if (broker.has_preset_value(key) && broker.get_preset_cci_value(key).is_number())
+                    return broker.get_preset_cci_value(key).get_uint64();
+                return d;
+            };
+            t.address = get("address", 0);
+            t.size = get("size", 0);
+            std::string rk = t.name + ".relative_addresses";
+            t.relative = !(broker.has_preset_value(rk) && broker.get_preset_cci_value(rk).is_bool() &&
+                           !broker.get_preset_cci_value(rk).get_bool());
+            // "platform.mau0.target_socket" -> "mau0"
+            std::string n = t.name;
+            auto dot = n.find_last_of('.');
+            if (dot != std::string::npos) n.resize(dot);
+            t.module = base_name(n);
+            if (!t.size) SCP_WARN(()) << t.name << " is bound without a size: it receives no accesses";
+        }
+        parse_masters();
+        const std::string& topo = p_topology.get_value();
+        if (topo != "shared" && topo != "crossbar") SCP_FATAL(()) << "topology must be shared or crossbar, not " << topo;
+        m_crossbar = topo == "crossbar";
+    }
+
+    void end_of_elaboration() override
+    {
+        size_t nt = m_targets.size();
+        m_tq.resize(nt);
+        m_t_ev.resize(nt);
+        m_t_endreq_ev.resize(nt);
+        m_t_seen.assign(nt, false);
+        m_t_endreq_time.assign(nt, SC_ZERO_TIME);
+        m_t_cur.assign(nt, nullptr);
+        m_req_free.assign(m_crossbar ? std::max<size_t>(1, nt) : 1, SC_ZERO_TIME);
+        m_rr.assign(m_req_free.size(), -1);
+        for (size_t k = 0; k < nt; k++) {
+            m_t_ev[k].reset(new sc_core::sc_event);
+            m_t_endreq_ev[k].reset(new sc_core::sc_event);
+            sc_core::sc_spawn([this, k]() { sender((int)k); }, sc_core::sc_gen_unique_name("sender"));
+        }
+    }
+
+    void start_of_simulation() override
+    {
+        m_stats = PerfStats::get().add_bus(name());
+        PerfStats::get().bus(m_stats).topology = p_topology.get_value();
+    }
+
+private:
+    struct Target {
+        std::string name, module;
+        uint64_t address = 0, size = 0;
+        bool relative = true;
+    };
+    struct Pending {
+        tlm::tlm_generic_payload* t = nullptr;
+        sc_time arrival;
+        int target = -1;
+        int master = 0; // key in m_masters
+    };
+    struct Fwd {
+        tlm::tlm_generic_payload* t;
+        sc_time ready;
+    };
+    struct Flight {
+        int init;
+        int master;
+        uint64_t addr;
+    };
+    /** QoS settings of one master, from the masters parameter. */
+    struct Cfg {
+        std::string name;
+        int64_t priority = -1;
+        double max_mbps = 0, min_mbps = 0, window_ns = 1000;
+        uint32_t outstanding = 0;
+    };
+    /** State of one master: a traffic_gen (key: its index), or an initiator port without one (key: -1 - port). */
+    struct Master {
+        std::string label;
+        const Cfg* cfg = nullptr;
+        double tokens = 0, credit = 0; // bytes: bandwidth limit bucket, reserved bandwidth credit
+        sc_time last;
+        uint32_t inflight = 0;
+        double limited_since = -1; // ns: when the bandwidth limit began holding a request back
+    };
+    struct Resp {
+        tlm::tlm_generic_payload* t;
+        sc_time ready;
+        uint64_t seq;
+    };
+
+    std::vector<Target> m_targets;
+    std::vector<std::deque<Pending>> m_in;           // per initiator port: requests waiting for arbitration
+    std::vector<tlm::tlm_generic_payload*> m_owed;  // per initiator port: a request whose END_REQ waits for room
+    std::map<int, Master> m_masters;
+    std::vector<Cfg> m_cfg;
+    std::map<tlm::tlm_generic_payload*, int> m_from;
+    std::map<tlm::tlm_generic_payload*, Flight> m_flight;
+    std::vector<std::deque<Fwd>> m_tq;
+    std::vector<std::unique_ptr<sc_core::sc_event>> m_t_ev, m_t_endreq_ev;
+    std::vector<bool> m_t_seen;
+    std::vector<sc_time> m_t_endreq_time;
+    std::vector<tlm::tlm_generic_payload*> m_t_cur;
+    tlm_utils::peq_with_get<tlm::tlm_generic_payload> m_req_peq;
+    sc_core::sc_event m_arb_ev, m_resp_ev;
+    std::vector<Resp> m_rq;
+    uint64_t m_rseq = 0;
+    std::vector<sc_time> m_req_free;          // per request channel (one, or one per target)
+    std::vector<int> m_rr;                    // per request channel: the port granted last
+    std::map<int, sc_time> m_resp_free;       // per response channel (0, or one per initiator port)
+    std::map<int, std::string> m_port_label;  // initiator port -> the master first seen on it
+    bool m_crossbar = false;
+    int m_stats = -1;
+
+    sc_time cycle() const { return ns(1e3 / std::max(1e-6, p_clock.get_value())); }
+    uint32_t beats(uint32_t len) const { uint32_t w = std::max<uint32_t>(1, p_data_bytes.get_value()); return (len + w - 1) / w; }
+
+    void parse_masters()
+    {
+        std::string s = p_masters.get_value();
+        std::replace(s.begin(), s.end(), '\n', ';');
+        std::istringstream all(s);
+        std::string entry;
+        while (std::getline(all, entry, ';')) {
+            auto colon = entry.find(':');
+            std::string head = entry.substr(0, colon == std::string::npos ? entry.size() : colon);
+            head.erase(std::remove_if(head.begin(), head.end(), ::isspace), head.end());
+            if (head.empty() && colon == std::string::npos) continue;
+            if (head.empty() || colon == std::string::npos)
+                SCP_FATAL(()) << "masters: \"" << entry << "\" is not <master>: key=value ...";
+            Cfg c;
+            c.name = head;
+            std::string body = entry.substr(colon + 1);
+            std::replace(body.begin(), body.end(), ',', ' ');
+            std::istringstream kv(body);
+            std::string pair;
+            while (kv >> pair) {
+                auto eq = pair.find('=');
+                if (eq == std::string::npos) SCP_FATAL(()) << "masters: " << head << ": \"" << pair << "\" is not key=value";
+                std::string k = pair.substr(0, eq), v = pair.substr(eq + 1);
+                double d = 0;
+                try {
+                    size_t used = 0;
+                    d = std::stod(v, &used);
+                    if (used != v.size()) throw std::invalid_argument(v);
+                } catch (...) {
+                    SCP_FATAL(()) << "masters: " << head << ": " << k << " needs a number, got \"" << v << "\"";
+                }
+                if (d < 0) SCP_FATAL(()) << "masters: " << head << ": " << k << " cannot be negative";
+                if (k == "priority") c.priority = (int64_t)d;
+                else if (k == "max_mbps") c.max_mbps = d;
+                else if (k == "min_mbps") c.min_mbps = d;
+                else if (k == "outstanding") c.outstanding = (uint32_t)d;
+                else if (k == "window_ns") c.window_ns = d > 0 ? d : 1000;
+                else {
+                    SCP_FATAL(()) << "masters: " << head << ": unknown key " << k
+                                  << " (priority, max_mbps, min_mbps, outstanding, window_ns)";
+                }
+            }
+            m_cfg.push_back(c);
+        }
+    }
+
+    static bool name_matches(const std::string& full, const std::string& label, const std::string& n)
+    {
+        if (n == label || n == full) return true;
+        return full.size() > n.size() && full.compare(full.size() - n.size(), n.size(), n) == 0 &&
+               full[full.size() - n.size() - 1] == '.';
+    }
+
+    /** The master a transaction belongs to (created on first sight), and its key. */
+    int master_of(int init, tlm::tlm_generic_payload& t)
+    {
+        PerfTag* tag = nullptr;
+        t.get_extension(tag);
+        int key = tag && tag->gen >= 0 ? tag->gen : -1 - init;
+        auto it = m_masters.find(key);
+        if (it != m_masters.end()) return key;
+        Master& m = m_masters[key];
+        std::string full;
+        if (key >= 0) {
+            full = PerfStats::get().gen(key).name;
+            m.label = PerfStats::get().gen(key).label;
+        } else {
+            m.label = "initiator_" + std::to_string(init);
+        }
+        for (auto& c : m_cfg)
+            if (name_matches(full, m.label, c.name)) {
+                if (m.cfg) {
+                    SCP_WARN(()) << "masters: " << m.label << " matches more than one entry; using " << m.cfg->name;
+                } else {
+                    m.cfg = &c;
+                }
+            }
+        m.last = sc_time_stamp();
+        if (m.cfg) {
+            m.tokens = depth(m.cfg->max_mbps, *m.cfg, t.get_data_length());
+            m.credit = depth(m.cfg->min_mbps, *m.cfg, t.get_data_length());
+            std::ostringstream q;
+            auto num = [&](const char* k, double v) { q << (q.tellp() > 0 ? " " : "") << k << "=" << v; };
+            if (m.cfg->priority >= 0) num("priority", (double)m.cfg->priority);
+            if (m.cfg->max_mbps > 0) num("max_mbps", m.cfg->max_mbps);
+            if (m.cfg->min_mbps > 0) num("min_mbps", m.cfg->min_mbps);
+            if (m.cfg->outstanding) num("outstanding", m.cfg->outstanding);
+            if (m.cfg->window_ns != 1000) num("window_ns", m.cfg->window_ns);
+            PerfStats::get().bus(m_stats).masters[m.label].qos = q.str();
+        }
+        if (!m_port_label.count(init)) m_port_label[init] = m.label;
+        return key;
+    }
+
+    /** Bucket size for a rate: rate x window, at least one access. */
+    static double depth(double mbps, const Cfg& c, uint32_t len) { return std::max<double>(len, mbps / 1e3 * c.window_ns); }
+
+    void refill(Master& m, uint32_t len)
+    {
+        if (!m.cfg) return;
+        double dt = (sc_time_stamp() - m.last).to_seconds() * 1e9;
+        m.last = sc_time_stamp();
+        if (m.cfg->max_mbps > 0) m.tokens = std::min(depth(m.cfg->max_mbps, *m.cfg, len), m.tokens + m.cfg->max_mbps / 1e3 * dt);
+        if (m.cfg->min_mbps > 0) m.credit = std::min(depth(m.cfg->min_mbps, *m.cfg, len), m.credit + m.cfg->min_mbps / 1e3 * dt);
+    }
+
+    /** When the bandwidth limit lets this request go (now or later). */
+    sc_time limit_free(Master& m, uint32_t len)
+    {
+        if (!m.cfg || m.cfg->max_mbps <= 0 || m.tokens >= len) return sc_time_stamp();
+        return sc_time_stamp() + ns((len - m.tokens) / (m.cfg->max_mbps / 1e3)) + sc_time(1, sc_core::SC_PS);
+    }
+
+    bool urgent(Master& m, uint32_t len) { return m.cfg && m.cfg->min_mbps > 0 && m.credit >= len; }
+
+    uint32_t prio(Master& m, tlm::tlm_generic_payload& t)
+    {
+        if (m.cfg && m.cfg->priority >= 0) return (uint32_t)m.cfg->priority;
+        PerfTag* tag = nullptr;
+        t.get_extension(tag);
+        return tag ? tag->qos : 0;
+    }
+
+    /** Order of service among requests or responses: urgent first, then priority (arbitration "priority"). */
+    std::pair<int, uint32_t> key(tlm::tlm_generic_payload& t)
+    {
+        PerfTag* tag = nullptr;
+        t.get_extension(tag);
+        if (!tag) return { 0, 0 };
+        return { tag->urgent ? 1 : 0, p_arb.get_value() == "priority" ? tag->priority() : 0u };
+    }
+
+    int decode(uint64_t a)
+    {
+        for (size_t k = 0; k < m_targets.size(); k++)
+            if (a >= m_targets[k].address && a - m_targets[k].address < m_targets[k].size) return (int)k;
+        return -1;
+    }
+
+    void b_transport(int, tlm::tlm_generic_payload& t, sc_time&)
+    {
+        SCP_ERR(()) << "at_bus takes approximately-timed (nb_transport) initiators only";
+        t.set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
+    }
+
+    tlm::tlm_sync_enum fw(int id, tlm::tlm_generic_payload& t, tlm::tlm_phase& ph, sc_time& d)
+    {
+        if (ph == tlm::BEGIN_REQ) {
+            m_from[&t] = id;
+            m_req_peq.notify(t, d);
+            return tlm::TLM_ACCEPTED;
+        }
+        if (ph == tlm::END_RESP) return tlm::TLM_COMPLETED;
+        return tlm::TLM_ACCEPTED;
+    }
+
+    void end_req(int id, tlm::tlm_generic_payload& t, sc_time d)
+    {
+        tlm::tlm_phase ph = tlm::END_REQ;
+        target_socket[id]->nb_transport_bw(t, ph, d);
+    }
+
+    void on_request()
+    {
+        while (auto* t = m_req_peq.get_next_transaction()) {
+            int id = m_from[t];
+            m_from.erase(t);
+            int k = decode(t->get_address());
+            if (k < 0) {
+                t->set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
+                tlm::tlm_phase ph = tlm::BEGIN_RESP;
+                sc_time d = cycle();
+                target_socket[id]->nb_transport_bw(*t, ph, d);
+                continue;
+            }
+            int mk = master_of(id, *t);
+            if ((int)m_in.size() <= id) m_in.resize(id + 1), m_owed.resize(id + 1, nullptr);
+            m_in[id].push_back({ t, sc_time_stamp(), k, mk });
+            // The port takes the next request at once while it has room; the last place is
+            // released (END_REQ) when one of its requests is granted.
+            if (m_in[id].size() < std::max<uint32_t>(1, p_input_queue.get_value())) end_req(id, *t, cycle());
+            else m_owed[id] = t;
+            m_arb_ev.notify(SC_ZERO_TIME);
+        }
+    }
+
+    int channel_of(int target) const { return m_crossbar ? target : 0; }
+
+    /** The port and entry to grant now on request channel c, or {-1,-1}; wake: when a held-back request may go. */
+    std::pair<int, int> pick(int c, sc_time& wake)
+    {
+        int n = (int)m_in.size();
+        const std::string& arb = p_arb.get_value();
+        struct Cand {
+            int i = -1;
+            bool urg = false;
+        };
+        std::vector<Cand> cand(n);
+        bool any_urgent = false;
+        uint32_t tq = std::max<uint32_t>(1, p_target_queue.get_value());
+        for (int s = 0; s < n; s++) {
+            for (int i = 0; i < (int)m_in[s].size(); i++) {
+                auto& p = m_in[s][i];
+                if (channel_of(p.target) != c || m_tq[p.target].size() >= tq) continue;
+                Master& m = m_masters[p.master];
+                uint32_t len = p.t->get_data_length();
+                refill(m, len);
+                if (m.cfg && m.cfg->outstanding && m.inflight >= m.cfg->outstanding) continue;
+                sc_time free = limit_free(m, len);
+                if (free > sc_time_stamp()) {
+                    if (m.limited_since < 0) m.limited_since = now_ns();
+                    wake = std::min(wake, free);
+                    continue;
+                }
+                cand[s] = { i, urgent(m, len) };
+                any_urgent |= cand[s].urg;
+                break; // the oldest request of the port that may go
+            }
+        }
+        auto ok = [&](int s) { return cand[s].i >= 0 && (!any_urgent || cand[s].urg); };
+        auto at = [&](int s) -> Pending& { return m_in[s][cand[s].i]; };
+        if (arb == "fcfs") {
+            int best = -1;
+            for (int s = 0; s < n; s++)
+                if (ok(s) && (best < 0 || at(s).arrival < at(best).arrival)) best = s;
+            return { best, best < 0 ? -1 : cand[best].i };
+        }
+        uint32_t top = 0;
+        if (arb == "priority")
+            for (int s = 0; s < n; s++)
+                if (ok(s)) top = std::max(top, prio(m_masters[at(s).master], *at(s).t));
+        for (int k = 1; k <= n; k++) {
+            int s = (m_rr[c] + k + n) % n;
+            if (!ok(s)) continue;
+            if (arb == "priority" && prio(m_masters[at(s).master], *at(s).t) != top) continue;
+            return { s, cand[s].i };
+        }
+        return { -1, -1 };
+    }
+
+    void grant(int s, int i, int c)
+    {
+        Pending p = m_in[s][i];
+        m_in[s].erase(m_in[s].begin() + i);
+        m_rr[c] = s;
+        auto& t = *p.t;
+        Master& m = m_masters[p.master];
+        uint32_t len = t.get_data_length();
+        bool urg = urgent(m, len);
+        PerfTag* tag = nullptr;
+        t.get_extension(tag);
+        if (tag) tag->prio = (int32_t)prio(m, t), tag->urgent = urg;
+        sc_time occ = cycle() * (1 + (t.is_write() ? beats(len) : 0));
+        m_req_free[c] = sc_time_stamp() + occ;
+        auto& bs = PerfStats::get().bus(m_stats);
+        double occ_ns = occ.to_seconds() * 1e9;
+        bs.req_busy_ns += occ_ns;
+        bs.req_channels[m_crossbar ? "to " + m_targets[p.target].module : "shared"] += occ_ns;
+        bs.wait[m.label].add((sc_time_stamp() - p.arrival).to_seconds() * 1e9);
+        auto& ms = bs.masters[m.label];
+        ms.grants++;
+        ms.bytes += len;
+        if (urg) ms.urgent++;
+        if (m.cfg) {
+            if (m.cfg->max_mbps > 0) {
+                if (m.limited_since >= 0) {
+                    ms.limited++;
+                    ms.limit_wait_ns += now_ns() - m.limited_since;
+                    m.limited_since = -1;
+                }
+                m.tokens -= len;
+            }
+            if (m.cfg->min_mbps > 0) m.credit = std::max(0.0, m.credit - len);
+        }
+        m.inflight++;
+        m_flight[&t] = { s, p.master, t.get_address() };
+        // A port that was full takes its next request now (the granted one: after its transfer).
+        if (m_owed[s]) {
+            tlm::tlm_generic_payload* o = m_owed[s];
+            m_owed[s] = nullptr;
+            end_req(s, *o, o == &t ? occ : cycle());
+        }
+        if (m_targets[p.target].relative) t.set_address(t.get_address() - m_targets[p.target].address);
+        m_tq[p.target].push_back({ &t, sc_time_stamp() + occ + cycle() * p_latency.get_value() });
+        m_t_ev[p.target]->notify(SC_ZERO_TIME);
+    }
+
+    void arbiter()
+    {
+        while (true) {
+            sc_time now = sc_time_stamp();
+            sc_time wake = sc_core::sc_max_time();
+            bool granted = false;
+            for (int c = 0; c < (int)m_req_free.size(); c++) {
+                if (now < m_req_free[c]) {
+                    // Only worth waking for if something waits for this channel.
+                    wake = std::min(wake, m_req_free[c]);
+                    continue;
+                }
+                auto w = pick(c, wake);
+                if (w.first < 0) continue;
+                grant(w.first, w.second, c);
+                granted = true;
+            }
+            if (granted) continue;
+            bool waiting = false;
+            for (auto& q : m_in) waiting |= !q.empty();
+            if (waiting && wake < sc_core::sc_max_time()) wait(wake - now, m_arb_ev);
+            else wait(m_arb_ev);
+        }
+    }
+
+    void sender(int k)
+    {
+        while (true) {
+            while (m_tq[k].empty()) wait(*m_t_ev[k]);
+            // In order of grant, except that a more important request (urgent, then priority with
+            // arbitration "priority") that has reached the target end of the bus passes the ones before it.
+            sc_time now = sc_time_stamp();
+            auto& q = m_tq[k];
+            auto fk = key(*q[0].t);
+            int best = -1;
+            sc_time soon = q[0].ready;
+            for (int i = 1; i < (int)q.size(); i++) {
+                auto ki = key(*q[i].t);
+                if (ki <= fk) continue;
+                if (q[i].ready > now) soon = std::min(soon, q[i].ready);
+                else if (best < 0 || ki > key(*q[best].t)) best = i;
+            }
+            if (best < 0) {
+                if (q[0].ready > now) {
+                    wait(soon - now, *m_t_ev[k]);
+                    continue;
+                }
+                best = 0;
+            }
+            Fwd f = m_tq[k][best];
+            m_tq[k].erase(m_tq[k].begin() + best);
+            m_arb_ev.notify(SC_ZERO_TIME);
+            m_t_seen[k] = false;
+            m_t_cur[k] = f.t;
+            tlm::tlm_phase ph = tlm::BEGIN_REQ;
+            sc_time d = SC_ZERO_TIME;
+            auto st = initiator_socket[k]->nb_transport_fw(*f.t, ph, d);
+            if (st == tlm::TLM_ACCEPTED) {
+                while (!m_t_seen[k]) wait(*m_t_endreq_ev[k]);
+                if (m_t_endreq_time[k] > sc_time_stamp()) wait(m_t_endreq_time[k] - sc_time_stamp());
+            } else if (st == tlm::TLM_UPDATED) {
+                if (ph == tlm::END_REQ) wait(d);
+                else if (ph == tlm::BEGIN_RESP) respond(*f.t, d);
+            } else {
+                respond(*f.t, d);
+            }
+            m_t_cur[k] = nullptr;
+        }
+    }
+
+    tlm::tlm_sync_enum bw(int k, tlm::tlm_generic_payload& t, tlm::tlm_phase& ph, sc_time& d)
+    {
+        if (ph == tlm::END_REQ || (ph == tlm::BEGIN_RESP && m_t_cur[k] == &t)) {
+            m_t_seen[k] = true;
+            m_t_endreq_time[k] = sc_time_stamp() + d;
+            m_t_endreq_ev[k]->notify(d);
+        }
+        if (ph == tlm::BEGIN_RESP) {
+            respond(t, d);
+            return tlm::TLM_COMPLETED;
+        }
+        return tlm::TLM_ACCEPTED;
+    }
+
+    /** A response from a target: it waits for its response channel. */
+    void respond(tlm::tlm_generic_payload& t, const sc_time& d)
+    {
+        if (!m_flight.count(&t)) return;
+        m_rq.push_back({ &t, sc_time_stamp() + d, m_rseq++ });
+        m_resp_ev.notify(d);
+    }
+
+    /**
+     * The response channels (one, or one per initiator port): one cycle plus the read
+     * data, urgent first, then priority (arbitration "priority"), then arrival.
+     */
+    void responder()
+    {
+        while (true) {
+            if (m_rq.empty()) {
+                wait(m_resp_ev);
+                continue;
+            }
+            sc_time now = sc_time_stamp();
+            sc_time soon = sc_core::sc_max_time();
+            // The best ready response of each free channel.
+            std::map<int, int> best;
+            for (int i = 0; i < (int)m_rq.size(); i++) {
+                auto& r = m_rq[i];
+                int c = m_crossbar ? m_flight[r.t].init : 0;
+                sc_time free = m_resp_free.count(c) ? m_resp_free[c] : SC_ZERO_TIME;
+                sc_time can = std::max(free, r.ready);
+                if (can > now) {
+                    soon = std::min(soon, can);
+                    continue;
+                }
+                auto b = best.find(c);
+                if (b == best.end()) {
+                    best[c] = i;
+                    continue;
+                }
+                auto& o = m_rq[b->second];
+                auto ka = key(*r.t), kb = key(*o.t);
+                if (ka > kb || (ka == kb && (r.ready < o.ready || (r.ready == o.ready && r.seq < o.seq)))) b->second = i;
+            }
+            if (best.empty()) {
+                wait(soon - now, m_resp_ev);
+                continue;
+            }
+            std::vector<int> idx;
+            for (auto& b : best) idx.push_back(b.second);
+            std::sort(idx.rbegin(), idx.rend()); // erase from the back
+            std::vector<Resp> go;
+            for (int i : idx) go.push_back(m_rq[i]), m_rq.erase(m_rq.begin() + i);
+            std::sort(go.begin(), go.end(), [](const Resp& a, const Resp& b) { return a.seq < b.seq; });
+            for (auto& r : go) send_response(r, now);
+        }
+    }
+
+    void send_response(const Resp& r, sc_time now)
+    {
+        auto& t = *r.t;
+        auto it = m_flight.find(&t);
+        Flight f = it->second;
+        m_flight.erase(it);
+        t.set_address(f.addr);
+        int c = m_crossbar ? f.init : 0;
+        sc_time occ = cycle() * (1 + (t.is_read() ? beats(t.get_data_length()) : 0));
+        m_resp_free[c] = now + occ;
+        auto& bs = PerfStats::get().bus(m_stats);
+        double occ_ns = occ.to_seconds() * 1e9;
+        bs.resp_busy_ns += occ_ns;
+        bs.resp_channels[m_crossbar ? "to " + m_port_label[f.init] : "shared"] += occ_ns;
+        Master& m = m_masters[f.master];
+        bs.masters[m.label].resp_wait.add((now - r.ready).to_seconds() * 1e9);
+        if (m.inflight) m.inflight--;
+        m_arb_ev.notify(SC_ZERO_TIME);
+        tlm::tlm_phase ph = tlm::BEGIN_RESP;
+        sc_time dd = occ + cycle() * p_latency.get_value();
+        target_socket[f.init]->nb_transport_bw(t, ph, dd);
+    }
+};
+
+/* ---------------------------------------------------------------- dram_ctrl */
+
+/**
+ * dram_ctrl: an approximately-timed DRAM controller. Requests wait in a
+ * queue (queue_depth; END_REQ when there is room). The scheduler starts at
+ * most one access per cycle on a bank that is ready: FR-FCFS prefers the
+ * oldest access to an open row (unless the oldest request has waited
+ * age_limit_ns), FCFS takes the oldest. A closed bank first needs an
+ * activate (tRCD), another open row a precharge too (tRP + tRCD); the
+ * column command then gives data tCL later, on the shared data bus, for
+ * burst_length / 2 cycles per burst. The data bus is booked in the first
+ * free slot, so an access to an open row can pass one that waits for its
+ * activate. A bank takes its next column command one burst after the last
+ * one (open page) or after the precharge (closed page). Every tREFI all
+ * banks refresh for tRFC and their rows close.
+ */
+class dram_ctrl : public sc_core::sc_module
+{
+    SCP_LOGGER();
+
+public:
+    tlm_utils::simple_target_socket<dram_ctrl, BW> target_socket;
+    cci::cci_param<double> p_clock;
+    cci::cci_param<uint32_t> p_data_bytes;
+    cci::cci_param<uint32_t> p_bl;
+    cci::cci_param<uint32_t> p_banks;
+    cci::cci_param<uint32_t> p_row_bytes;
+    cci::cci_param<uint32_t> p_trcd;
+    cci::cci_param<uint32_t> p_tcl;
+    cci::cci_param<uint32_t> p_trp;
+    cci::cci_param<double> p_trfc;
+    cci::cci_param<double> p_trefi;
+    cci::cci_param<uint32_t> p_queue;
+    cci::cci_param<std::string> p_sched;
+    cci::cci_param<std::string> p_page;
+    cci::cci_param<std::string> p_mapping;
+    cci::cci_param<double> p_frontend;
+    cci::cci_param<double> p_age;
+    cci::cci_param<bool> p_qos;
+
+    explicit dram_ctrl(const sc_core::sc_module_name& n)
+        : sc_core::sc_module(n)
+        , target_socket("target_socket")
+        , p_clock("clock_mhz", 1600, "DRAM clock in MHz (data moves on both edges: 1600 MHz is DDR4-3200)")
+        , p_data_bytes("data_bytes", 8, "Width of the data bus in bytes (8: 64 bits)")
+        , p_bl("burst_length", 8, "Beats per burst")
+        , p_banks("banks", 16, "Number of banks")
+        , p_row_bytes("row_bytes", 8192, "Bytes in one row of a bank (the page size)")
+        , p_trcd("tRCD", 22, "Activate to read or write, in cycles")
+        , p_tcl("tCL", 22, "Read or write to data, in cycles")
+        , p_trp("tRP", 22, "Precharge, in cycles")
+        , p_trfc("tRFC_ns", 350, "Refresh time, in ns (0: no refresh)")
+        , p_trefi("tREFI_ns", 7800, "Refresh interval, in ns")
+        , p_queue("queue_depth", 32, "Requests the controller holds")
+        , p_sched("scheduler", "fr_fcfs", "fr_fcfs (open rows first) or fcfs")
+        , p_page("page_policy", "open", "open (keep the row open) or closed (precharge after each access)")
+        , p_mapping("mapping", "row_bank_col",
+                    "Address to bank: row_bank_col (consecutive rows in turn on each bank) or row_col_bank "
+                    "(consecutive bursts in turn on each bank)")
+        , p_frontend("frontend_ns", 0, "Extra controller latency added to every response, in ns")
+        , p_age("age_limit_ns", 1000, "FR-FCFS: a request older than this is served first, so open-row hits cannot starve it (0: no limit)")
+        , p_qos("qos", false,
+                "Schedule by the priority the at_bus in front gave each request: urgent (min_mbps) first, then "
+                "higher priority, then the scheduler's order")
+        , m_in_peq("in_peq")
+        , m_out_peq("out_peq")
+    {
+        target_socket.register_nb_transport_fw(this, &dram_ctrl::fw);
+        SC_METHOD(on_in);
+        sensitive << m_in_peq.get_event();
+        dont_initialize();
+        SC_METHOD(on_out);
+        sensitive << m_out_peq.get_event() << m_resp_done_ev;
+        dont_initialize();
+        SC_THREAD(schedule);
+    }
+
+    void start_of_simulation() override
+    {
+        m_stats = PerfStats::get().add_mem(name());
+        m_banks.assign(std::max<uint32_t>(1, p_banks.get_value()), Bank());
+    }
+
+private:
+    struct Bank {
+        int64_t row = -1;
+        sc_time ready;
+    };
+    struct Req {
+        tlm::tlm_generic_payload* t;
+        sc_time arrival;
+        uint32_t bank;
+        int64_t row;
+    };
+
+    tlm_utils::peq_with_get<tlm::tlm_generic_payload> m_in_peq, m_out_peq;
+    std::deque<Req> m_q;
+    std::deque<tlm::tlm_generic_payload*> m_blocked, m_resp;
+    std::vector<Bank> m_banks;
+    sc_core::sc_event m_kick, m_resp_done_ev;
+    std::map<sc_time, sc_time> m_data; // booked data bus slots: start -> end
+    bool m_resp_busy = false;
+    int64_t m_ref_k = 0;
+    int m_stats = -1;
+
+    sc_time cycle() const { return ns(1e3 / std::max(1e-6, p_clock.get_value())); }
+
+    static std::pair<int, uint32_t> cls(const Req& r) { return cls(*r.t); }
+    static std::pair<int, uint32_t> cls(tlm::tlm_generic_payload& t)
+    {
+        PerfTag* tag = nullptr;
+        t.get_extension(tag);
+        return tag ? std::make_pair(tag->urgent ? 1 : 0, tag->priority()) : std::make_pair(0, 0u);
+    }
+
+    void locate(uint64_t a, uint32_t& bank, int64_t& row)
+    {
+        uint64_t nb = m_banks.size(), rb = std::max<uint32_t>(1, p_row_bytes.get_value());
+        if (p_mapping.get_value() == "row_col_bank") {
+            uint64_t line = std::max<uint64_t>(1, (uint64_t)p_data_bytes.get_value() * p_bl.get_value());
+            uint64_t l = a / line;
+            bank = (uint32_t)(l % nb);
+            row = (int64_t)(((l / nb) * line) / rb);
+        } else {
+            uint64_t page = a / rb;
+            bank = (uint32_t)(page % nb);
+            row = (int64_t)(page / nb);
+        }
+    }
+
+    tlm::tlm_sync_enum fw(tlm::tlm_generic_payload& t, tlm::tlm_phase& ph, sc_time& d)
+    {
+        if (ph == tlm::BEGIN_REQ) {
+            m_in_peq.notify(t, d);
+            return tlm::TLM_ACCEPTED;
+        }
+        if (ph == tlm::END_RESP) {
+            m_resp_busy = false;
+            m_resp_done_ev.notify(SC_ZERO_TIME);
+            return tlm::TLM_COMPLETED;
+        }
+        return tlm::TLM_ACCEPTED;
+    }
+
+    void accept(tlm::tlm_generic_payload* t)
+    {
+        Req r{ t, sc_time_stamp(), 0, 0 };
+        locate(t->get_address(), r.bank, r.row);
+        m_q.push_back(r);
+        tlm::tlm_phase ph = tlm::END_REQ;
+        sc_time d = SC_ZERO_TIME;
+        target_socket->nb_transport_bw(*t, ph, d);
+        m_kick.notify(SC_ZERO_TIME);
+    }
+
+    void on_in()
+    {
+        while (auto* t = m_in_peq.get_next_transaction()) {
+            if (m_q.size() < std::max<uint32_t>(1, p_queue.get_value())) accept(t);
+            else m_blocked.push_back(t);
+        }
+    }
+
+    /** Lazy refresh: when time has passed a refresh, the rows are closed; returns the end of the current one. */
+    sc_time refresh()
+    {
+        double trefi = p_trefi.get_value(), trfc = p_trfc.get_value();
+        if (trfc <= 0 || trefi <= 0) return SC_ZERO_TIME;
+        int64_t k = (int64_t)std::floor(now_ns() / trefi);
+        if (k > m_ref_k) {
+            PerfStats::get().mem(m_stats).refreshes += k - m_ref_k;
+            m_ref_k = k;
+            for (auto& b : m_banks) b.row = -1;
+        }
+        return k > 0 ? ns(k * trefi + trfc) : SC_ZERO_TIME;
+    }
+
+    /** Cycles before the column command of r, and the length of its data. */
+    void timing(const Req& r, uint32_t& pre, sc_time& data, sc_time& burst)
+    {
+        auto& b = m_banks[r.bank];
+        pre = b.row == r.row ? 0 : b.row < 0 ? p_trcd.get_value() : p_trp.get_value() + p_trcd.get_value();
+        sc_time c = cycle();
+        uint32_t per = std::max<uint32_t>(1, p_data_bytes.get_value() * p_bl.get_value());
+        uint32_t bursts = (r.t->get_data_length() + per - 1) / per;
+        burst = c * ((double)std::max<uint32_t>(2, p_bl.get_value()) / 2);
+        data = burst * (double)bursts;
+    }
+
+    /** How much later than possible the data of r would get the data bus, less one burst (0: issue it now). */
+    sc_time data_delay(const Req& r)
+    {
+        uint32_t pre;
+        sc_time data, burst;
+        timing(r, pre, data, burst);
+        sc_time want = sc_time_stamp() + cycle() * (double)(pre + p_tcl.get_value());
+        sc_time start = find_data(want, data);
+        return start > want + burst ? start - want - burst : SC_ZERO_TIME;
+    }
+
+    /** The first free data bus slot of length len at or after want. */
+    sc_time find_data(sc_time want, sc_time len)
+    {
+        sc_time now = sc_time_stamp();
+        while (!m_data.empty() && m_data.begin()->second <= now) m_data.erase(m_data.begin());
+        sc_time t = want;
+        for (auto& iv : m_data) {
+            if (iv.second <= t) continue;
+            if (iv.first >= t + len) break;
+            t = iv.second;
+        }
+        return t;
+    }
+
+    /** The first free data bus slot of length len at or after want, booked. */
+    sc_time book_data(sc_time want, sc_time len)
+    {
+        sc_time now = sc_time_stamp();
+        while (!m_data.empty() && m_data.begin()->second <= now) m_data.erase(m_data.begin());
+        sc_time t = want;
+        for (auto& iv : m_data) {
+            if (iv.second <= t) continue;
+            if (iv.first >= t + len) break;
+            t = iv.second;
+        }
+        m_data[t] = t + len;
+        return t;
+    }
+
+    void schedule()
+    {
+        while (true) {
+            if (m_q.empty()) {
+                wait(m_kick);
+                continue;
+            }
+            sc_time ref_end = refresh();
+            if (sc_time_stamp() < ref_end) {
+                wait(ref_end - sc_time_stamp());
+                continue;
+            }
+            sc_time now = sc_time_stamp();
+            int best = -1;
+            bool fr = p_sched.get_value() != "fcfs";
+            double age = p_age.get_value();
+            // With qos, only the most important class among the requests whose bank is ready competes;
+            // the age limit then applies to the oldest request of that class.
+            bool qos = p_qos.get_value();
+            std::pair<int, uint32_t> top{ 0, 0 };
+            if (qos)
+                for (auto& r : m_q)
+                    if (m_banks[r.bank].ready <= now) top = std::max(top, cls(r));
+            size_t oldest = 0;
+            if (qos)
+                while (oldest < m_q.size() && cls(m_q[oldest]) != top) oldest++;
+            if (fr && age > 0 && oldest < m_q.size() && m_banks[m_q[oldest].bank].ready <= now &&
+                (now - m_q[oldest].arrival).to_seconds() * 1e9 >= age)
+                best = (int)oldest;
+            auto in = [&](size_t i) { return !qos || cls(m_q[i]) == top; };
+            if (fr) {
+                for (size_t i = 0; i < m_q.size() && best < 0; i++)
+                    if (in(i) && m_banks[m_q[i].bank].ready <= now && m_banks[m_q[i].bank].row == m_q[i].row) best = (int)i;
+                for (size_t i = 0; i < m_q.size() && best < 0; i++)
+                    if (in(i) && m_banks[m_q[i].bank].ready <= now) best = (int)i;
+            } else if (qos) {
+                for (size_t i = 0; i < m_q.size() && best < 0; i++)
+                    if (in(i) && m_banks[m_q[i].bank].ready <= now) best = (int)i;
+            } else if (m_banks[m_q[0].bank].ready <= now) {
+                best = 0;
+            }
+            if (best < 0) {
+                sc_time soon = sc_core::sc_max_time();
+                for (size_t i = 0; i < (fr || qos ? m_q.size() : 1); i++) soon = std::min(soon, m_banks[m_q[i].bank].ready);
+                wait(soon - now, m_kick);
+                continue;
+            }
+            // A controller issues the command only when the data bus is free for it about when its
+            // data comes out (within one burst); otherwise the request stays in the queue, where the
+            // scheduler can still pick another one next time.
+            sc_time late = data_delay(m_q[best]);
+            if (late > SC_ZERO_TIME) {
+                wait(late, m_kick);
+                continue;
+            }
+            Req r = m_q[best];
+            m_q.erase(m_q.begin() + best);
+            serve(r);
+            if (!m_blocked.empty() && m_q.size() < std::max<uint32_t>(1, p_queue.get_value())) {
+                // With qos the most important waiting request gets the free place, else the oldest.
+                size_t b = 0;
+                if (p_qos.get_value())
+                    for (size_t i = 1; i < m_blocked.size(); i++)
+                        if (cls(*m_blocked[i]) > cls(*m_blocked[b])) b = i;
+                auto* t = m_blocked[b];
+                m_blocked.erase(m_blocked.begin() + b);
+                accept(t);
+            }
+            wait(cycle()); // one command per cycle
+        }
+    }
+
+    void serve(const Req& r)
+    {
+        auto& s = PerfStats::get().mem(m_stats);
+        auto& b = m_banks[r.bank];
+        uint32_t pre = 0; // cycles before the column command
+        if (b.row == r.row) s.row_hits++;
+        else if (b.row < 0) pre = p_trcd.get_value(), s.row_misses++;
+        else pre = p_trp.get_value() + p_trcd.get_value(), s.row_conflicts++;
+        sc_time c = cycle();
+        uint32_t per = std::max<uint32_t>(1, p_data_bytes.get_value() * p_bl.get_value());
+        uint32_t bursts = (r.t->get_data_length() + per - 1) / per;
+        sc_time burst = c * ((double)std::max<uint32_t>(2, p_bl.get_value()) / 2);
+        sc_time data = burst * (double)bursts;
+        sc_time tcl = c * (double)p_tcl.get_value();
+        sc_time start = book_data(sc_time_stamp() + c * (double)pre + tcl, data);
+        sc_time end = start + data;
+        sc_time column = start - tcl; // the (last possible) time of the column command
+        s.data_busy_ns += data.to_seconds() * 1e9;
+        if (p_page.get_value() == "closed") {
+            b.row = -1;
+            b.ready = end + c * (double)p_trp.get_value();
+        } else {
+            b.row = r.row;
+            b.ready = column + data; // the next column command, one burst per burst later
+        }
+        if (r.t->is_write()) s.writes++;
+        else s.reads++;
+        s.bytes += r.t->get_data_length();
+        s.service.add((end - r.arrival).to_seconds() * 1e9);
+        r.t->set_response_status(tlm::TLM_OK_RESPONSE);
+        m_out_peq.notify(*r.t, end + ns(p_frontend.get_value()) - sc_time_stamp());
+    }
+
+    void on_out()
+    {
+        while (auto* t = m_out_peq.get_next_transaction()) m_resp.push_back(t);
+        while (!m_resp_busy && !m_resp.empty()) {
+            auto* t = m_resp.front();
+            m_resp.pop_front();
+            tlm::tlm_phase ph = tlm::BEGIN_RESP;
+            sc_time d = SC_ZERO_TIME;
+            auto st = target_socket->nb_transport_bw(*t, ph, d);
+            if (st == tlm::TLM_ACCEPTED) m_resp_busy = true; // wait for END_RESP
+        }
+    }
+};
+
+/* ---------------------------------------------------------------- perf_stats */
+
+/**
+ * perf_stats: where and when the statistics are written. When every
+ * traffic_gen is done it writes output (JSON) and, with stop_when_done,
+ * stops the simulation. If the simulation ends first, the file is written
+ * when the platform is destroyed, with "complete": false.
+ */
+class perf_stats : public sc_core::sc_module
+{
+public:
+    cci::cci_param<std::string> p_output;
+    cci::cci_param<bool> p_stop;
+
+    explicit perf_stats(const sc_core::sc_module_name& n)
+        : sc_core::sc_module(n)
+        , p_output("output", "perf-stats.json", "File the statistics are written to (JSON)")
+        , p_stop("stop_when_done", true, "Stop the simulation when every traffic_gen is done")
+    {
+    }
+
+    void start_of_simulation() override
+    {
+        PerfStats::get().output = p_output.get_value();
+        PerfStats::get().stop_when_done = p_stop.get_value();
+    }
+
+    ~perf_stats() override
+    {
+        auto& s = PerfStats::get();
+        if (!s.written && !s.output.empty()) s.write_now(s.all_done());
+    }
+};
+
+extern "C" void module_register();
+void module_register()
+{
+    // Each factory is registered once, even if QBox calls this again.
+    auto broker = cci::cci_get_broker();
+    if (!broker.get_param_handle(CCI_GS_MF_NAME "traffic_gen").is_valid()) GSC_MODULE_REGISTER_C(traffic_gen);
+    if (!broker.get_param_handle(CCI_GS_MF_NAME "at_bus").is_valid()) GSC_MODULE_REGISTER_C(at_bus);
+    if (!broker.get_param_handle(CCI_GS_MF_NAME "dram_ctrl").is_valid()) GSC_MODULE_REGISTER_C(dram_ctrl);
+    if (!broker.get_param_handle(CCI_GS_MF_NAME "perf_stats").is_valid()) GSC_MODULE_REGISTER_C(perf_stats);
+}

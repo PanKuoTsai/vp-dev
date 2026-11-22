@@ -2,3 +2,9 @@
 catalog/qbox-catalog.json linguist-generated=true
 package-lock.json linguist-generated=true
 theia/package-lock.json linguist-generated=true
+patches/qbox/0002-vp-studio-probes-debug-dap.patch linguist-generated=true
+patches/qbox/0003-vp-studio-perf-models.patch linguist-generated=true
+
+# A patch, and the source one is made from, has LF line ends on every system:
+# git apply and patch reject a patch with CRLF.
+patches/** text eol=lf

@@ -82,6 +82,9 @@ tools/qbox-catalog/          元件目錄工具（C++）
 tools/sim-agent/             sim agent 模組（C++，QBox 的外部模組函式庫）
 tools/qbox-pin/              建置釘選的 QBox（含 sim agent 與元件目錄）
 patches/qbox/                套用在釘選 QBox 上的修補，與送上游的報告草稿
+patches/qbox/src/            0002 與 0003 的原始碼（VP Studio 自己的 SystemC 元件）：改這裡，再執行 make-patches.js
+patches/make-patches.js      由 patches/*/src/ 產生對應的 .patch；--check 只檢查是否一致
+patches/libqemu/             套用在 libqemu 上的修補（存檔與還原需要）
 theia/                       獨立版：Theia 的桌面版與瀏覽器版、內建擴充套件清單、建置腳本
 tools/model-build/           建模精靈的模型：編譯、自我測試、元件目錄項目
 tools/container/             容器映像：Dockerfile、建置、執行與取出檔案的腳本
