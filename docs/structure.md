@@ -80,7 +80,7 @@ examples/                    參考用的範例，不會被指令複製
 examples/ci/                 CI 範例：Python 檢查、GitLab CI、Jenkinsfile
 tools/qbox-catalog/          元件目錄工具（C++）
 tools/sim-agent/             sim agent 模組（C++，QBox 的外部模組函式庫）
-tools/qbox-pin/              建置釘選的 QBox（含 sim agent 與元件目錄）
+tools/qbox-pin/              建置釘選的 QBox（含 sim agent 與元件目錄）；apply-patch.sh 套用修補，也能把已套用的舊版修補更新到目前版本
 patches/qbox/                套用在釘選 QBox 上的修補，與送上游的報告草稿
 patches/qbox/src/            0002 與 0003 的原始碼（VP Studio 自己的 SystemC 元件）：改這裡，再執行 make-patches.js
 patches/make-patches.js      由 patches/*/src/ 產生對應的 .patch；--check 只檢查是否一致

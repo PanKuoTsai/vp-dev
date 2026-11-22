@@ -91,14 +91,11 @@ else
 fi
 
 [ "$patching" = 1 ] || { patches=(); echo "== not applying VP Studio's patches (--no-patches)"; }
+# apply-patch.sh: applied already, not applied, or an earlier version of the
+# patch applied (VP Studio was updated since this QBox was patched).
+. "$here/apply-patch.sh"
 for p in ${patches[@]+"${patches[@]}"}; do
-  f="$studio/$p"
-  if git -C "$dest" apply --reverse --check "$f" 2>/dev/null; then
-    echo "== patch already applied: $p"
-  else
-    echo "== applying $p"
-    git -C "$dest" apply "$f"
-  fi
+  vp_apply_patch "$dest" "$studio/$p" "$p"
 done
 
 cpm_args=()
@@ -117,12 +114,7 @@ lq="$(sed -n 's/^libqemu_SOURCE_DIR:[A-Z]*=//p' "$dest/build/CMakeCache.txt" 2>/
 for p in ${qpatches[@]+"${qpatches[@]}"}; do
   f="$studio/$p"
   [ -d "$lq" ] || { echo "no $lq after configure; cannot apply $p" >&2; exit 1; }
-  if git -C "$lq" apply --reverse --check "$f" 2>/dev/null; then
-    echo "== libqemu patch already applied: $p"
-  else
-    echo "== applying $p to libqemu"
-    git -C "$lq" apply "$f"
-  fi
+  vp_apply_patch "$lq" "$f" "$p (libqemu)"
 done
 echo "== build ($jobs jobs)"
 cmake --build "$dest/build" -j "$jobs"

@@ -24,7 +24,12 @@ tools/qbox-pin/build-qbox.sh [--jobs N] [--targets "aarch64"] [--no-catalog] DIR
 The script:
 1. Clones QBox into `DIR`, or reuses it, and checks out the pinned commit. It
    refuses to check out over local changes to tracked files.
-2. Applies the QBox patches.
+2. Applies the QBox patches (`apply-patch.sh`). A patch that is applied is
+   left alone. When an earlier version of a patch is applied, because VP
+   Studio was updated since, the files that differ are brought to this
+   version: a file the patch adds is replaced, and the earlier one is kept in
+   `DIR/build/vp-studio-replaced/`. If that cannot be done without touching
+   QBox's own files, the script stops and changes nothing.
 3. Configures with the preset (this fetches libqemu), applies the libqemu
    patches to `build/_deps/libqemu-src`, and builds.
 4. Builds the sim agent against that build.

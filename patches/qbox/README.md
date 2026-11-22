@@ -28,6 +28,11 @@ node patches/make-patches.js           # write 0002 and 0003
 node patches/make-patches.js --check   # only say whether they are up to date
 ```
 
+A changed patch does not strand the QBox trees that have the earlier version:
+`build-qbox.sh` sees that a patch is partly there and brings the files that
+differ up to date (`tools/qbox-pin/apply-patch.sh`). Until then `VP Studio:
+Check QBox Version` reports that patch as not applied.
+
 `build-qbox.sh` and `qbox.pin.json` use the `.patch` files as before; nothing
 reads `src/` when QBox is built. `npm test` fails when a patch is not what its
 source gives (`test/patches.test.js`). 0001 has no source folder: it changes

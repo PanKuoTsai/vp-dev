@@ -36,7 +36,7 @@ breakpoints and watchpoints (their registers only hold values), EDPCSR.
 Resuming a core sets QEMU's `halted` to 0, so a core that was in WFI wakes up
 (allowed), and a core the guest powered off must not be resumed.
 
-VP Studio's `lib/debugdap.js` adds the module to a platform and writes the OpenOCD
+VP Studio's `lib/debug/debugdap.js` adds the module to a platform and writes the OpenOCD
 configuration (`vp.sys` and `vp.dbg` mem_ap targets, one CTI per core, and
 the commands `vp_halt`, `vp_resume` and `vp_status`).
 

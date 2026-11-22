@@ -45,7 +45,7 @@ index 00000000..87851a26
 +gs_create_dymod(debug_dap)
 diff --git a/systemc-components/debug_dap/README.md b/systemc-components/debug_dap/README.md
 new file mode 100644
-index 00000000..b1007062
+index 00000000..cfd79f57
 --- /dev/null
 +++ b/systemc-components/debug_dap/README.md
 @@ -0,0 +1,43 @@
@@ -87,7 +87,7 @@ index 00000000..b1007062
 +Resuming a core sets QEMU's `halted` to 0, so a core that was in WFI wakes up
 +(allowed), and a core the guest powered off must not be resumed.
 +
-+VP Studio's `lib/debugdap.js` adds the module to a platform and writes the OpenOCD
++VP Studio's `lib/debug/debugdap.js` adds the module to a platform and writes the OpenOCD
 +configuration (`vp.sys` and `vp.dbg` mem_ap targets, one CTI per core, and
 +the commands `vp_halt`, `vp_resume` and `vp_status`).
 +

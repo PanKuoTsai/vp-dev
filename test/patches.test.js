@@ -73,3 +73,54 @@ test('patches: the patches are packaged, their source and the tool that writes t
   assert.ok(!shipped('patches/qbox/src/0003-vp-studio-perf-models/tree/systemc-components/perf/src/perf.cc'));
   assert.ok(!shipped('patches/qbox/src/0003-vp-studio-perf-models/message.txt'));
 });
+
+test('patches: build-qbox.sh applies a patch, leaves an applied one, and updates an earlier version of one', () => {
+  // tools/qbox-pin/apply-patch.sh, with git, on a stand-in for QBox's repository. When VP Studio is
+  // updated and a patch changed, the QBox that has the earlier version must still build.
+  const { spawnSync } = require('child_process');
+  const sh = (script, env) => spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, ...env } });
+  if (sh('git --version').status !== 0) return; // no bash or no git on this machine
+  const unix = (p) => p.split(path.sep).join('/');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-apply-'));
+  // A patch like VP Studio's: two lines in a file QBox has, and two files it adds.
+  const write = (name, readme) => {
+    const src = path.join(dir, name, 'src', '0001-x');
+    fs.mkdirSync(path.join(src, 'tree', 'comp', 'mine'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'message.txt'), 'From: t\nSubject: [PATCH] x\n---\n');
+    fs.writeFileSync(path.join(src, 'changes.diff'), 'diff --git a/comp/CMakeLists.txt b/comp/CMakeLists.txt\n--- a/comp/CMakeLists.txt\n+++ b/comp/CMakeLists.txt\n@@ -1,3 +1,4 @@\n one\n two\n+add_subdirectory(mine)\n three\n');
+    fs.writeFileSync(path.join(src, 'tree', 'comp', 'mine', 'README.md'), readme);
+    fs.writeFileSync(path.join(src, 'tree', 'comp', 'mine', 'mine.cc'), 'int mine;\n');
+    const file = path.join(dir, name + '.patch');
+    fs.writeFileSync(file, make.generate(src));
+    return unix(file);
+  };
+  const earlier = write('earlier', 'See lib/x.js.\n');
+  const current = write('current', 'See lib/dir/x.js.\n');
+  const env = { TREE: unix(path.join(dir, 'qbox')), SCRIPT: unix(path.join(root, 'tools', 'qbox-pin', 'apply-patch.sh')), EARLIER: earlier, CURRENT: current };
+  const fresh = 'rm -rf "$TREE" && mkdir -p "$TREE/comp" && printf "one\\ntwo\\nthree\\n" > "$TREE/comp/CMakeLists.txt" && git -C "$TREE" init -q && git -C "$TREE" config core.autocrlf false'
+    + ' && git -C "$TREE" add -A && git -C "$TREE" -c user.name=t -c user.email=t@example.com commit -q -m base && . "$SCRIPT"';
+  const readme = () => fs.readFileSync(path.join(dir, 'qbox', 'comp', 'mine', 'README.md'), 'utf8');
+  // Not applied, then applied already.
+  let r = sh(`${fresh} && vp_apply_patch "$TREE" "$CURRENT" p && vp_apply_patch "$TREE" "$CURRENT" p`, env);
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.deepStrictEqual(r.stdout.trim().split('\n'), ['== applying p', '== patch already applied: p']);
+  assert.strictEqual(readme(), 'See lib/dir/x.js.\n');
+  // The earlier version applied: only the file that differs is replaced, and the old one is kept.
+  r = sh(`${fresh} && git -C "$TREE" apply "$EARLIER" && vp_apply_patch "$TREE" "$CURRENT" p && git -C "$TREE" apply --reverse --check "$CURRENT"`, env);
+  assert.strictEqual(r.status, 0, r.stderr + r.stdout);
+  assert.match(r.stdout, /^== updating p \(an earlier version of it is applied\)\n {3}replaced comp\/mine\/README\.md \(the earlier one is kept as build\/vp-studio-replaced\/comp\/mine\/README\.md\)\n$/);
+  assert.strictEqual(readme(), 'See lib/dir/x.js.\n');
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'qbox', 'build', 'vp-studio-replaced', 'comp', 'mine', 'README.md'), 'utf8'), 'See lib/x.js.\n');
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'qbox', 'comp', 'CMakeLists.txt'), 'utf8'), 'one\ntwo\nadd_subdirectory(mine)\nthree\n');
+  // A file of QBox's own where the patch adds one: refused, nothing changed.
+  r = sh(`${fresh} && mkdir -p "$TREE/comp/mine" && echo own > "$TREE/comp/mine/mine.cc" && git -C "$TREE" add -A && git -C "$TREE" -c user.name=t -c user.email=t@example.com commit -q -m own`
+    + ' && { vp_apply_patch "$TREE" "$CURRENT" p; echo "returned $?"; } && git -C "$TREE" status --porcelain', env);
+  assert.match(r.stdout, /^returned 1\n$/);
+  assert.match(r.stderr, /== cannot apply p\nIt does not apply to comp\/mine\/mine\.cc/);
+  assert.ok(!fs.existsSync(path.join(dir, 'qbox', 'comp', 'mine', 'README.md')));
+  // build-qbox.sh uses it for QBox's and for libqemu's patches.
+  const build = fs.readFileSync(path.join(root, 'tools', 'qbox-pin', 'build-qbox.sh'), 'utf8');
+  assert.ok(build.includes('. "$here/apply-patch.sh"') && build.includes('vp_apply_patch "$dest" "$studio/$p" "$p"') && build.includes('vp_apply_patch "$lq" "$f" "$p (libqemu)"'));
+  assert.ok(shipped('tools/qbox-pin/apply-patch.sh'));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
