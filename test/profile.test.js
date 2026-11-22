@@ -39,7 +39,7 @@ function makeSymElf(file, syms) {
 }
 
 test('profile: ELF function symbols and address lookup', () => {
-  const elfsym = require('../lib/elfsym');
+  const elfsym = require('../lib/analysis/elfsym');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-elf-'));
   try {
     const f = path.join(dir, 'vmlinux');
@@ -68,7 +68,7 @@ test('profile: ELF function symbols and address lookup', () => {
 });
 
 test('profile: KASLR offset, per-function sums and the symbol warning', () => {
-  const prof = require('../lib/profile');
+  const prof = require('../lib/analysis/profile');
   assert.strictEqual(prof.isArm64Image('41524d64'), true);
   assert.strictEqual(prof.isArm64Image('00000000'), false);
   const syms = { find: (n) => ({ _text: 0xffff800008000000n, kimage_vaddr: 0xffff800009130000n })[n] };
@@ -96,7 +96,7 @@ test('profile: KASLR offset, per-function sums and the symbol warning', () => {
 });
 
 test('ftrace: parse, match calls and returns, name, summarize, write a Chrome trace', () => {
-  const ftrace = require('../lib/ftrace');
+  const ftrace = require('../lib/analysis/ftrace');
   const K = 0xffff800008000000n;
   const OFF = 0x1234600000n; // KASLR, 2 MiB steps
   const fns = [
@@ -202,7 +202,7 @@ test('ftrace: parse, match calls and returns, name, summarize, write a Chrome tr
 });
 
 test('ftrace: a BL whose function returns elsewhere ends its frame (JIT code, trampolines)', () => {
-  const ftrace = require('../lib/ftrace');
+  const ftrace = require('../lib/analysis/ftrace');
   const M = 0xfffffbfffdbf7400n; // module space, no symbol
   const ev = (kind, from, to, ns, insns) => ({ kind, from, to, ns, insns });
   const fns = [{ name: 'run_prog', start: 0xffff800008001000n, size: 0x100n }];

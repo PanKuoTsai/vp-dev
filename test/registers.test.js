@@ -4,8 +4,8 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
-const registers = require('../lib/registers');
+const core = require('../lib/platform/core');
+const registers = require('../lib/analysis/registers');
 
 test('registers: the bundled descriptions load and cover the example platform', () => {
   const { descs, problems } = registers.loadDir(path.join(__dirname, '..', 'catalog', 'registers'));

@@ -3,7 +3,7 @@
  *
  * The OpenSSH of Windows starts SSH_ASKPASS with CreateProcess, which runs
  * only .exe files (a .cmd fails with "CreateProcessW failed error:2"), so
- * this launcher runs VP Studio's lib/askpass-helper.js with VS Code's own
+ * this launcher runs VP Studio's lib/sim/askpass-helper.js with VS Code's own
  * Node, the way vp-askpass.sh does on Linux:
  *
  *     "%VP_ASKPASS_NODE%" "%VP_ASKPASS_SCRIPT%" <the prompt ssh gave us>
@@ -13,7 +13,7 @@
  * other VP_ASKPASS_* variables come from ssh's environment, which the child
  * inherits. Only Win32 API, no C runtime start-up code needed beyond mingw's.
  *
- * Build: tools/askpass/build.sh (mingw-w64), output lib/vp-askpass.exe.
+ * Build: tools/askpass/build.sh (mingw-w64), output lib/sim/vp-askpass.exe.
  */
 #include <windows.h>
 

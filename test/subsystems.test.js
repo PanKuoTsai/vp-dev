@@ -2,7 +2,7 @@
 // Run with: node test/subsystems.test.js (every file: npm test)
 const { test } = require('./harness');
 const assert = require('assert');
-const core = require('../lib/core');
+const core = require('../lib/platform/core');
 const { load } = require('./helpers');
 
 // ------------------------------------------------------------------ subsystems (nested containers)
@@ -75,10 +75,10 @@ test('subsystems: analysis, memory map and Lua of the booted nested platform', (
 });
 
 test('subsystems: editing modules and connections inside a container', () => {
-  const modules = require('../lib/modules');
-  const connect = require('../lib/connect');
-  const params = require('../lib/params');
-  const jsonedit = require('../lib/jsonedit');
+  const modules = require('../lib/platform/modules');
+  const connect = require('../lib/platform/connect');
+  const params = require('../lib/platform/params');
+  const jsonedit = require('../lib/platform/jsonedit');
   let text = JSON.stringify(nested(), null, 2);
   const doc = () => JSON.parse(text);
   const an = () => core.analyze(doc());
@@ -126,7 +126,7 @@ test('subsystems: editing modules and connections inside a container', () => {
 });
 
 test('subsystems: definitions are found by JSON position, nested or not', () => {
-  const modules = require('../lib/modules');
+  const modules = require('../lib/platform/modules');
   const text = JSON.stringify(nested(), null, 2);
   const at = (m, p) => { const o = modules.definitionOffset(text, m, p); return o === null ? null : text.slice(o, o + 40).split('\n')[0]; };
   assert.strictEqual(at('periph.pl011_uart_0'), '"pl011_uart_0": {');
@@ -142,10 +142,10 @@ test('subsystems: definitions are found by JSON position, nested or not', () => 
 
 test('subsystems: device tree and tracing see nested modules', () => {
   const d = nested();
-  const r = require('../lib/devicetree').generate(d, { fileSize: () => 16 });
+  const r = require('../lib/generate/devicetree').generate(d, { fileSize: () => 16 });
   assert.match(r.dts, /periph_pl011_uart_0: serial@10000000 \{[^}]*interrupts = <0x0 0x17b 0x4>;/);
   assert.match(r.dts, /periph_virtioblk_0: virtio_mmio@1c0d0000 \{/);
-  const trace = require('../lib/trace');
+  const trace = require('../lib/analysis/trace');
   const pts = trace.tracePoints(d).map((p) => p.id);
   assert.ok(pts.includes('periph.pl011_uart_0.target_socket'));
   const t = trace.traceOptions(d, ['periph.pl011_uart_0.target_socket'], '/x/vp_sim_agent');

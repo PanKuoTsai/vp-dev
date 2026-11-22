@@ -2,8 +2,8 @@
 // Run with: node test/catalog.test.js (every file: npm test)
 const { test } = require('./harness');
 const assert = require('assert');
-const core = require('../lib/core');
-const cat = require('../lib/catalog');
+const core = require('../lib/platform/core');
+const cat = require('../lib/platform/catalog');
 const { load, catalog } = require('./helpers');
 
 const catProblems = (d) => core.analyze(d, { catalog }).problems;

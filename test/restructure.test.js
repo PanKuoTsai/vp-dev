@@ -3,13 +3,13 @@
 const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
-const core = require('../lib/core');
+const core = require('../lib/platform/core');
 const { examplePath, catalog } = require('./helpers');
 
 // ------------------------------------------------------------------ replace a model, group into a subsystem
 
 test('replace model: A76 -> A53 keeps the CPU connections and drops the two ports A53 lacks', () => {
-  const rs = require('../lib/restructure');
+  const rs = require('../lib/platform/restructure');
   const text = fs.readFileSync(examplePath, 'utf8');
   const doc = JSON.parse(text);
   const plan = rs.swapPlan(doc, catalog, 'cpu', 'cpu_arm_cortexA53');
@@ -22,7 +22,7 @@ test('replace model: A76 -> A53 keeps the CPU connections and drops the two port
   assert.ok(!d.modules.cpu.ports.gicv3_maintenance_interrupt && !d.modules.cpu.ports.pmu_interrupt);
   assert.deepStrictEqual(core.analyze(d, { catalog }).problems, []);
   // Only the CPU's lines change.
-  const e = require('../lib/modules').minimalEdit(text, out);
+  const e = require('../lib/platform/modules').minimalEdit(text, out);
   assert.ok(text.slice(0, e.start).endsWith('"type": "cpu_arm_cortexA'));
   // Best fits first: the A710 has every port; A53 loses two connections.
   const ch = rs.swapChoices(doc, catalog, 'cpu');
@@ -31,7 +31,7 @@ test('replace model: A76 -> A53 keeps the CPU connections and drops the two port
 });
 
 test('replace model: PL011 -> qemu_pl011 renames ports, adds the QEMU instance, drops the library', () => {
-  const rs = require('../lib/restructure');
+  const rs = require('../lib/platform/restructure');
   const text = fs.readFileSync(examplePath, 'utf8');
   const doc = JSON.parse(text);
   const plan = rs.swapPlan(doc, catalog, 'pl011_uart_0', 'qemu_pl011');
@@ -48,7 +48,7 @@ test('replace model: PL011 -> qemu_pl011 renames ports, adds the QEMU instance, 
 });
 
 test('replace model: bindings other modules write to a renamed port follow it', () => {
-  const rs = require('../lib/restructure');
+  const rs = require('../lib/platform/restructure');
   const text = fs.readFileSync(examplePath, 'utf8');
   const doc = JSON.parse(text);
   // A made-up GIC whose shared interrupt inputs are called "shared_in".
@@ -65,7 +65,7 @@ test('replace model: bindings other modules write to a renamed port follow it', 
 });
 
 test('group into a subsystem: moves the text, rewrites references from outside, keeps every connection', () => {
-  const rs = require('../lib/restructure');
+  const rs = require('../lib/platform/restructure');
   const text = fs.readFileSync(examplePath, 'utf8');
   const doc = JSON.parse(text);
   const plan = rs.groupPlan(doc, ['gic_0'], 'irqs');

@@ -4,7 +4,7 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const disklock = require('../lib/disklock');
+const disklock = require('../lib/sim/disklock');
 const { load } = require('./helpers');
 
 test('disk images: found in QEMU option strings, ${TOP} resolved, read-only ones marked', () => {
@@ -42,7 +42,7 @@ test('disk locks: processes with the image open', () => {
 
 test('disk space: ext4 superblock free space and the low-space check', () => {
   const os = require('os');
-  const diskspace = require('../lib/diskspace');
+  const diskspace = require('../lib/sim/diskspace');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-ext-'));
   // A minimal ext4 superblock at byte 1024, as in the Ubuntu image: 4 KiB blocks, 64-bit.
   const image = (blocks, free, reserved) => {

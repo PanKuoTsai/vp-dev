@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 test('xml: elements, attributes, entities, CDATA, comments and errors', () => {
-  const xml = require('../lib/xml');
+  const xml = require('../lib/generate/xml');
   const r = xml.parse('﻿<?xml version="1.0"?>\n<!DOCTYPE a>\n<a:root xmlns:a="u" k=\'v &amp; w\'><!-- c --><b x="1"/>t&lt;<![CDATA[<raw>]]>&#x41;&#66;<c>  in  </c></a:root>');
   assert.strictEqual(xml.localName(r.name), 'root');
   assert.strictEqual(xml.attr(r, 'k'), 'v & w');
@@ -23,7 +23,7 @@ test('xml: elements, attributes, entities, CDATA, comments and errors', () => {
 });
 
 test('ipxact: numbers and expressions', () => {
-  const ip = require('../lib/ipxact');
+  const ip = require('../lib/generate/ipxact');
   const cases = { '42': 42n, '0x2A': 42n, "'h2A": 42n, "8'h2a": 42n, "'b101": 5n, "'d42": 42n, "'o52": 42n, '#2A': 42n, '4K': 4096n, '1M': 1n << 20n, "32'hFFFF_FFFF": 0xffffffffn };
   for (const [s, v] of Object.entries(cases)) assert.strictEqual(ip.literal(s), v, s);
   assert.strictEqual(ip.literal("4'bx01"), undefined);
@@ -45,8 +45,8 @@ test('ipxact: numbers and expressions', () => {
 });
 
 test('ipxact: the 2014 example becomes a model the wizard accepts', () => {
-  const ip = require('../lib/ipxact');
-  const modelgen = require('../lib/modelgen');
+  const ip = require('../lib/generate/ipxact');
+  const modelgen = require('../lib/generate/modelgen');
   const doc = ip.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ipxact', 'simple_timer.xml'), 'utf8'));
   assert.strictEqual(doc.standard, 'IEEE 1685-2014');
   assert.strictEqual(doc.vlnv.name, 'simple_timer');
@@ -80,13 +80,13 @@ test('ipxact: the 2014 example becomes a model the wizard accepts', () => {
   assert.deepStrictEqual(up.outputs, existing.outputs);
   assert.strictEqual(up.registers.length, 7);
   // As a register description it expands as the shipped ones do.
-  const registers = require('../lib/registers');
+  const registers = require('../lib/analysis/registers');
   const desc = ip.toDescription(doc, b, { types: ['simple_timer'] });
   assert.strictEqual(registers.expand(desc).length, 7);
 });
 
 test('ipxact: 2009 register resets, dim arrays, mixed access and skipped parts', () => {
-  const ip = require('../lib/ipxact');
+  const ip = require('../lib/generate/ipxact');
   const x = `<spirit:component xmlns:spirit="http://www.spiritconsortium.org/XMLSchema/SPIRIT/1685-2009">
     <spirit:vendor>v</spirit:vendor><spirit:library>l</spirit:library><spirit:name>uart</spirit:name><spirit:version>1</spirit:version>
     <spirit:memoryMaps><spirit:memoryMap><spirit:name>mm</spirit:name>

@@ -4,14 +4,14 @@ const { test, testAsync } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
-const view = require('../lib/view');
+const core = require('../lib/platform/core');
+const view = require('../lib/webview/view');
 const os = require('os');
 const { load, workspace } = require('./helpers');
 
 // ------------------------------------------------------------------ device tree
 test('lua expressions: precedence, truthiness, math, and refusal', () => {
-  const { evaluate } = require('../lib/luaexpr');
+  const { evaluate } = require('../lib/platform/luaexpr');
   const aff = '(math.floor(i / 8) << 8) | (i % 8)';
   assert.deepStrictEqual([0, 7, 8, 9, 17].map((i) => evaluate(aff, { i })), [0, 7, 256, 257, 513]);
   const conduit = 'ACCEL == "kvm" and "hvc" or "smc"';
@@ -30,7 +30,7 @@ test('lua expressions: precedence, truthiness, math, and refusal', () => {
 });
 
 test('device tree: Ubuntu platform matches its addresses and interrupts', () => {
-  const dt = require('../lib/devicetree');
+  const dt = require('../lib/generate/devicetree');
   const doc = load();
   doc.devicetree = { bootargs: 'console=ttyAMA0 root=LABEL=root-arm64' };
   const sizes = { 'image_ext4_initrd.img': 0x0c26be30 };
@@ -70,7 +70,7 @@ test('device tree: Ubuntu platform matches its addresses and interrupts', () => 
 });
 
 test('device tree: overrides, unknown devices, missing pieces', () => {
-  const dt = require('../lib/devicetree');
+  const dt = require('../lib/generate/devicetree');
   const doc = load();
   // An unknown device with a bus address: described by the platform, or noted.
   doc.modules.timer_0 = { type: 'my_timer', ports: { regs: { address: '0x1c000000', size: '0x1000', bind: 'router.initiator_socket' }, irq: { bind: 'gic_0.spi_in_70' } } };
@@ -101,7 +101,7 @@ test('device tree: overrides, unknown devices, missing pieces', () => {
 });
 
 test('device tree compare: line diff, hunks, FDT files, the view tab', () => {
-  const dtc = require('../lib/dtcompare');
+  const dtc = require('../lib/generate/dtcompare');
   const ops = dtc.diffLines('a\nb\nc\nd\n', 'a\nB\nc\nd\ne\n');
   assert.deepStrictEqual(ops.map((o) => o.op + o.text), [' a', '-b', '+B', ' c', ' d', '+e']);
   assert.deepStrictEqual(ops.filter((o) => o.op === '-').map((o) => [o.a, o.b]), [[2, null]]);
@@ -134,8 +134,8 @@ test('device tree compare: line diff, hunks, FDT files, the view tab', () => {
 testAsync('device tree compare: with dtc, a changed address shows as one changed reg line', async () => {
   const { execFileSync } = require('child_process');
   try { execFileSync('dtc', ['--version'], { stdio: 'ignore' }); } catch (e) { return; } // no dtc on this machine
-  const dt = require('../lib/devicetree');
-  const dtc = require('../lib/dtcompare');
+  const dt = require('../lib/generate/devicetree');
+  const dtc = require('../lib/generate/dtcompare');
   const d = load();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vps-dt-'));
   const old = path.join(dir, 'old.dtb');
@@ -151,7 +151,7 @@ testAsync('device tree compare: with dtc, a changed address shows as one changed
 });
 
 test('device tree: the DTS goes next to its DTB, with the same name', () => {
-  const dt = require('../lib/devicetree');
+  const dt = require('../lib/generate/devicetree');
   const doc = load();
   const pf = '/q/platforms/ubuntu/ubuntu-aarch64.platform.json';
   assert.deepStrictEqual(dt.outputPaths(doc, pf), { dts: '/q/platforms/ubuntu/ubuntu-aarch64.generated.dts', dtb: '/q/platforms/ubuntu/ubuntu-aarch64.generated.dtb' });
@@ -175,7 +175,7 @@ test('device tree: analyze warns when devicetree.output is not loaded', () => {
 });
 
 testAsync('device tree: dtc as a runner (on the simulation host) gets the DTS on stdin and gives the DTB', async () => {
-  const launch = require('../lib/launch');
+  const launch = require('../lib/sim/launch');
   const dir = workspace();
   const d = load();
   d.devicetree = { output: '${TOP}/fw/gen.dtb' };
@@ -187,6 +187,6 @@ testAsync('device tree: dtc as a runner (on the simulation host) gets the DTS on
   assert.strictEqual(fs.readFileSync(r.dts, 'utf8'), seen[1]);
   assert.ok(fs.readFileSync(r.dtb).equals(Buffer.from([0xd0, 0x0d, 0xfe, 0xed])));
   // The Device tree tab's comparison runs dtc the same way.
-  const dtcompare = require('../lib/dtcompare');
+  const dtcompare = require('../lib/generate/dtcompare');
   assert.strictEqual((await dtcompare.runDtc(async (args, input) => Buffer.from(`${args.join(' ')}|${input}`), ['-I', 'dtb'], 'x')).toString(), '-I dtb|x');
 });

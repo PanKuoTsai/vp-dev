@@ -7,8 +7,8 @@ const path = require('path');
 const os = require('os');
 
 test('checkpoint: what a checkpoint of the Ubuntu platform holds', () => {
-  const ck = require('../lib/checkpoint');
-  const reg = require('../lib/registers');
+  const ck = require('../lib/sim/checkpoint');
+  const reg = require('../lib/analysis/registers');
   const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
   const top = '/plat';
@@ -42,7 +42,7 @@ test('checkpoint: what a checkpoint of the Ubuntu platform holds', () => {
 });
 
 testAsync('checkpoint: save refuses a disk in a snapshot overlay, and runs the guest on afterwards', async () => {
-  const ck = require('../lib/checkpoint');
+  const ck = require('../lib/sim/checkpoint');
   const calls = [];
   const client = { request: async (m, p) => { calls.push(m); return m === 'sim.getStatus' ? { state: 'running' } : { time: { seconds: 1, text: '1 s' }, memories: [], registers: [] }; } };
   await assert.rejects(ck.save(client, '/nonexistent/x', { volatile: [{ module: 'blk', file: '/d.img' }], memories: [], registers: [], disks: [], skipped: [], unsaved: [] }, {}), /snapshot=on/);
@@ -55,7 +55,7 @@ testAsync('checkpoint: save refuses a disk in a snapshot overlay, and runs the g
 });
 
 test('checkpoint: manifest, listing and how to start from it', () => {
-  const ck = require('../lib/checkpoint');
+  const ck = require('../lib/sim/checkpoint');
   const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const text = JSON.stringify(doc);
   assert.strictEqual(ck.withDiskFile('file=${TOP}a.img,format=raw,if=none,readonly=off', '/c/run/d.img', false), 'file=/c/run/d.img,format=raw,if=none,readonly=off');

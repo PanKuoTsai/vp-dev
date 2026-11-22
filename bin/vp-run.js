@@ -7,14 +7,14 @@
 const fs = require('fs');
 const path = require('path');
 const cp = require('child_process');
-const core = require('../lib/core');
-const hostports = require('../lib/hostports');
-const simagent = require('../lib/simagent');
-const launch = require('../lib/launch');
-const kit = require('../lib/kit');
-const pin = require('../lib/pin');
-const checkpoint = require('../lib/checkpoint');
-const registers = require('../lib/registers');
+const core = require('../lib/platform/core');
+const hostports = require('../lib/sim/hostports');
+const simagent = require('../lib/sim/simagent');
+const launch = require('../lib/sim/launch');
+const kit = require('../lib/setup/kit');
+const pin = require('../lib/setup/pin');
+const checkpoint = require('../lib/sim/checkpoint');
+const registers = require('../lib/analysis/registers');
 
 const ROOT = path.join(__dirname, '..');
 /** "module: message", unless the message already starts with the module. */
@@ -334,7 +334,7 @@ async function importKitCmd(o, log) {
 
 /** Simulator, catalog-checked platform and generate options for a performance run, or an exit code. */
 function perfSetup(o, platformFile, log) {
-  const perf = require('../lib/perf');
+  const perf = require('../lib/analysis/perf');
   let doc;
   try {
     doc = JSON.parse(fs.readFileSync(platformFile, 'utf8'));
@@ -371,12 +371,12 @@ function perfSetup(o, platformFile, log) {
     return EXIT.SETUP;
   }
   // --param applies to every run; a swept value of the same parameter comes later in the Lua and wins.
-  return { doc, exe, qbox, generateOptions: { libraries: require('../lib/models').libraries(catalog || {}), overrides: [...o.params] } };
+  return { doc, exe, qbox, generateOptions: { libraries: require('../lib/generate/models').libraries(catalog || {}), overrides: [...o.params] } };
 }
 
 /** vp-run --perf: one experiment. */
 async function perfCmd(o, log) {
-  const perf = require('../lib/perf');
+  const perf = require('../lib/analysis/perf');
   const platformFile = path.resolve(o.platform);
   const set = perfSetup(o, platformFile, log);
   if (typeof set === 'number') return set;
@@ -396,7 +396,7 @@ async function perfCmd(o, log) {
 
 /** vp-run --perf-sweep: every combination of a sweep file, with its checks. */
 async function perfSweepCmd(o, log) {
-  const perf = require('../lib/perf');
+  const perf = require('../lib/analysis/perf');
   const specFile = path.resolve(o.perfSweep);
   let loaded;
   try {
@@ -505,7 +505,7 @@ async function run(o, log = (s) => process.stderr.write(`vp-run: ${s}\n`)) {
     }
     return EXIT.SETUP;
   }
-  for (const l of pre.low) log(`warning: the disk image of ${l.module} has only ${require('../lib/diskspace').fmtBytes(l.available)} free; guest services may fail`);
+  for (const l of pre.low) log(`warning: the disk image of ${l.module} has only ${require('../lib/sim/diskspace').fmtBytes(l.available)} free; guest services may fail`);
 
   let agent;
   try {
@@ -525,7 +525,7 @@ async function run(o, log = (s) => process.stderr.write(`vp-run: ${s}\n`)) {
   }
   if (!agent.lib) log(`running without the sim agent: ${agent.why}`);
 
-  const options = { libraries: require('../lib/models').libraries(catalog || {}), overrides: [...o.params] };
+  const options = { libraries: require('../lib/generate/models').libraries(catalog || {}), overrides: [...o.params] };
   let restorePlan;
   if (o.restore) {
     try {

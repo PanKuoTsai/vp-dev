@@ -2,8 +2,8 @@
 // Run with: node test/dataflow.test.js (every file: npm test)
 const { test } = require('./harness');
 const assert = require('assert');
-const core = require('../lib/core');
-const dataflow = require('../lib/dataflow');
+const core = require('../lib/platform/core');
+const dataflow = require('../lib/platform/dataflow');
 const { load, catalog } = require('./helpers');
 
 test('dataflow: what the CPUs reach and who reaches a device (Ubuntu example)', () => {

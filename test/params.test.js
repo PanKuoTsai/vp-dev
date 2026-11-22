@@ -4,9 +4,9 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
-const jsonedit = require('../lib/jsonedit');
-const params = require('../lib/params');
+const core = require('../lib/platform/core');
+const jsonedit = require('../lib/platform/jsonedit');
+const params = require('../lib/platform/params');
 const { load, catalog, exampleText } = require('./helpers');
 
 test('param form: catalog parameters, set ones first, Lua and per-instance values', () => {
@@ -141,7 +141,7 @@ test('param edits for one replica create perIndex entries as needed', () => {
 
 // ------------------------------------------------------------------ setting parameters at run time
 test('set param: input text is checked by category and C++ type', () => {
-  const sa = require('../lib/simagent');
+  const sa = require('../lib/sim/simagent');
   const u32 = { category: 'integer', type: 'uint32_t', value: 7 };
   assert.deepStrictEqual(sa.parseParamValue(' 0x10 ', u32), { json: '16' });
   assert.deepStrictEqual(sa.parseParamValue('4294967295', u32), { json: '4294967295' });
@@ -170,7 +170,7 @@ test('set param: input text is checked by category and C++ type', () => {
 });
 
 test('set param: runtime names map to platform modules and replicas', () => {
-  const params = require('../lib/params');
+  const params = require('../lib/platform/params');
   const doc = load();
   const a = core.analyze(doc);
   assert.deepStrictEqual(params.runtimeTarget(doc, a, 'platform.cpu_3.gdb_port'), { base: 'cpu', index: '3', name: 'gdb_port', instance: 'cpu_3' });

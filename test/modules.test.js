@@ -2,9 +2,9 @@
 // Run with: node test/modules.test.js (every file: npm test)
 const { test } = require('./harness');
 const assert = require('assert');
-const core = require('../lib/core');
-const jsonedit = require('../lib/jsonedit');
-const modules = require('../lib/modules');
+const core = require('../lib/platform/core');
+const jsonedit = require('../lib/platform/jsonedit');
+const modules = require('../lib/platform/modules');
 const { load, catalog, exampleText } = require('./helpers');
 
 test('module types to add: from the catalog, containers hidden, summarized', () => {

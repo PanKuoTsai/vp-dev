@@ -3,7 +3,7 @@
 Lists the module types a QBox build provides and records, for each one, its
 constructor arguments, sockets and signal ports, and CCI parameters (name,
 type, default, description). The output is the component catalog that
-`lib/catalog.js` checks platforms against.
+`lib/platform/catalog.js` checks platforms against.
 
 ## Build and run
 

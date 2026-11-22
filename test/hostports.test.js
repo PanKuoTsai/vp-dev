@@ -2,8 +2,8 @@
 // Run with: node test/hostports.test.js (every file: npm test)
 const { test, testAsync } = require('./harness');
 const assert = require('assert');
-const core = require('../lib/core');
-const hostports = require('../lib/hostports');
+const core = require('../lib/platform/core');
+const hostports = require('../lib/sim/hostports');
 const { load } = require('./helpers');
 
 test('host port variables: listed, emitted as overridable, preset values win', () => {

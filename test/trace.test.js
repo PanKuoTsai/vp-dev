@@ -4,10 +4,10 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
+const core = require('../lib/platform/core');
 const os = require('os');
-const trace = require('../lib/trace');
-const pin = require('../lib/pin');
+const trace = require('../lib/analysis/trace');
+const pin = require('../lib/setup/pin');
 const { load } = require('./helpers');
 
 test('trace points: bus-mapped ports of modules that are not replicated, by address', () => {
@@ -53,13 +53,13 @@ test('trace records: decoded with point names, little-endian values, CSV', () =>
 });
 
 test('trace view renders with a nonce and escapes the title', () => {
-  const html = require('../lib/traceview').render('N1', 'vscode-resource:', 'Trace: <x>');
+  const html = require('../lib/webview/traceview').render('N1', 'vscode-resource:', 'Trace: <x>');
   assert.ok(html.includes("script-src 'nonce-N1'") && html.includes('<title>Trace: &lt;x&gt;</title>'));
   assert.ok(html.includes("post({ type: 'ready' })"));
   // Same look as the platform view: shared tokens, the name and the platform in the header.
-  const theme = require('../lib/webtheme');
+  const theme = require('../lib/webview/webtheme');
   assert.ok(html.includes(theme.css.slice(0, 200)) && html.includes('<h1>Trace</h1><span class="tag mono">&lt;x&gt;</span>'));
-  const prof = require('../lib/profileview').render('N2', 'x', 'Profile: demo');
+  const prof = require('../lib/webview/profileview').render('N2', 'x', 'Profile: demo');
   assert.ok(prof.includes(theme.css.slice(0, 200)) && prof.includes('<h1>Profile</h1>'));
   // The controls the extension listens to are all there.
   for (const id of ['record', 'follow', 'clear', 'export', 'vcd', 'pchoose', 'point', 'dir', 'addr', 'bpoint', 'baccess', 'baddr', 'bval', 'bmask', 'badd', 'hit', 'hitcont', 'rows', 'st-total', 'st-probes']) {
@@ -82,7 +82,7 @@ test('trace options: bus tracers name their router for agent 0.12.0 (who issued 
 });
 
 test('trace view: Initiator column and clickable bus accesses', () => {
-  const html = require('../lib/traceview').render('N1', 'vscode-resource:', 'Trace');
+  const html = require('../lib/webview/traceview').render('N1', 'vscode-resource:', 'Trace');
   // The page script compiles (a quote escaped for the template, such as \\', breaks the whole panel).
   const scripts = [...html.matchAll(/<script nonce="N1">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   assert.ok(scripts.length >= 1);

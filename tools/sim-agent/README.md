@@ -182,7 +182,7 @@ What makes it work:
   saved time. SystemC events that models had scheduled for later are not
   saved.
 
-Disk images are not saved by the agent: VP Studio copies them (`lib/checkpoint.js`).
+Disk images are not saved by the agent: VP Studio copies them (`lib/sim/checkpoint.js`).
 
 Verified on 2026-11-16 with the Ubuntu AArch64 platform (8 CPUs, MTTCG):
 
@@ -250,7 +250,7 @@ agent records every call and return of the guest software, per vCPU:
 `ftrace.save` writes `VPFTRC01`, u32 version 1, u32 number of CPUs, and per
 CPU: u32 cpu, u32 0, u64 records written, u64 records kept, then the kept
 records (four u64 each), oldest first, little-endian. VP Studio's
-`lib/ftrace.js` matches returns to calls by return address and writes a
+`lib/analysis/ftrace.js` matches returns to calls by return address and writes a
 Chrome trace file for Perfetto UI and a summary.
 
 Limits:
@@ -263,7 +263,7 @@ Verified on 2026-11-17 (Ubuntu platform, 8 CPUs, recording 3 s of kernel
 after `Run /init`):
 - 1.18 million records on 8 CPUs; three busy CPUs filled their ring (they keep
   the newest 262144).
-- With `vmlinux`, the KASLR offset `lib/ftrace.js` derives from the call
+- With `vmlinux`, the KASLR offset `lib/analysis/ftrace.js` derives from the call
   targets alone was `0x498b99600000`, the same as `kimage_vaddr` gives.
 - 588,000 slices, all properly nested per CPU; the hottest functions were
   `blake2s_compress` and `sha512_transform` (entropy and key setup at boot).
@@ -297,7 +297,7 @@ How samples are taken:
   `alive`, because callbacks can come after the agent is destroyed.
 
 Only the first QEMU instance is profiled. VP Studio maps addresses to
-functions with an ELF symbol file (`lib/elfsym.js`, `lib/profile.js`). For an
+functions with an ELF symbol file (`lib/analysis/elfsym.js`, `lib/analysis/profile.js`). For an
 arm64 Linux kernel it finds the KASLR offset by itself:
 - It looks for the loaded image with the arm64 Image magic (`ARMd` at offset
   `0x38`), reading through `mem.read`.

@@ -4,13 +4,13 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
+const core = require('../lib/platform/core');
 const os = require('os');
-const launch = require('../lib/launch');
+const launch = require('../lib/sim/launch');
 const vprun = require('../bin/vp-run.js');
 
 test('launch: the agent module gets one bus socket per router', () => {
-  const launch = require('../lib/launch');
+  const launch = require('../lib/sim/launch');
   assert.deepStrictEqual(launch.agentModule('/a/sim_agent', 5000, ['router', 'periph.router_1']), {
     name: 'sim_agent', type: 'sim_agent', dylib: '/a/sim_agent', params: { port: 5000, buses: 2 },
     ports: { bus_0: { bind: 'router.target_socket' }, bus_1: { bind: 'periph.router_1.target_socket' } },
@@ -130,7 +130,7 @@ test('launch: build folders, local catalogs and the agent library', () => {
     assert.deepStrictEqual(specs, [path.join(ws, 'models', 'my_timer', 'my_timer.model.json')]);
     const r = launch.catalogWithLocal({ modules: { router: { ports: {}, params: {} } } }, { bundled: [{ type: 'cpu_arm_cortexA73', dir: 'cpu-a73' }], dirs, modelSpecs: specs });
     assert.deepStrictEqual(Object.keys(r.catalog.modules).sort(), ['cpu_arm_cortexA73', 'my_timer', 'router']);
-    const libs = require('../lib/models').libraries(r.catalog);
+    const libs = require('../lib/generate/models').libraries(r.catalog);
     assert.strictEqual(libs.cpu_arm_cortexA73, path.join(dirs[0], 'cpu-a73', 'cpu_arm_cortexA73')); // next to its catalog
 
     // --agent: an explicit path must exist; "none" turns it off; VP_SIM_AGENT is the default.

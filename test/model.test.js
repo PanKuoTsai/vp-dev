@@ -4,12 +4,12 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
+const core = require('../lib/platform/core');
 const { load } = require('./helpers');
 
 // ------------------------------------------------------------------ modeling wizard
 test('model: the starting description is valid and generates every file', () => {
-  const modelgen = require('../lib/modelgen');
+  const modelgen = require('../lib/generate/modelgen');
   const spec = modelgen.template('my_timer');
   assert.deepStrictEqual(modelgen.check(spec).problems, []);
   const files = modelgen.files(spec);
@@ -38,7 +38,7 @@ test('model: the starting description is valid and generates every file', () => 
 });
 
 test('model: checks catch overlaps, bad sizes, fields and names', () => {
-  const modelgen = require('../lib/modelgen');
+  const modelgen = require('../lib/generate/modelgen');
   const spec = modelgen.template('t');
   spec.registers.push(
     { name: 'BAD', offset: '0x2', size: 4 },                       // overlaps CTRL and STATUS, unaligned
@@ -61,9 +61,9 @@ test('model: checks catch overlaps, bad sizes, fields and names', () => {
 
 test('model: files on disk, catalog merge, and the dylib a platform writes', () => {
   const os = require('os');
-  const modelgen = require('../lib/modelgen');
-  const models = require('../lib/models');
-  const modules = require('../lib/modules');
+  const modelgen = require('../lib/generate/modelgen');
+  const models = require('../lib/generate/models');
+  const modules = require('../lib/platform/modules');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-model-'));
   const dir = path.join(root, 'models', 'my_timer');
   fs.mkdirSync(dir, { recursive: true });

@@ -4,7 +4,7 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
+const core = require('../lib/platform/core');
 const { load } = require('./helpers');
 
 test('example expands to 22 instances with 8 CPUs', () => {
@@ -123,8 +123,8 @@ test('generate: extraModules refuse a name the platform already uses', () => {
 });
 
 test('bundled modules: platforms name the type only; the library path is supplied at generation', () => {
-  const models = require('../lib/models');
-  const modules = require('../lib/modules');
+  const models = require('../lib/generate/models');
+  const modules = require('../lib/platform/modules');
   const base = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
   const a76 = base.modules.cpu_arm_cortexA76;
   // A made-up bundled module (the mechanism stays; VP Studio ships none since the
@@ -159,5 +159,5 @@ test('bundled modules: platforms name the type only; the library path is supplie
   const far = { library: '/opt/elsewhere/build/m.so', model: { dir: '/opt/elsewhere' } };
   assert.strictEqual(models.dylibFor(far, '/home/u/project/platforms/x'), null);
   // The device tree names the core it is.
-  assert.match(require('../lib/devicetree').generate(d, { fileSize: () => 16 }).dts, /compatible = "arm,cortex-a73";/);
+  assert.match(require('../lib/generate/devicetree').generate(d, { fileSize: () => 16 }).dts, /compatible = "arm,cortex-a73";/);
 });

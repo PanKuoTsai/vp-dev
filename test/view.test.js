@@ -3,11 +3,11 @@
 const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
-const core = require('../lib/core');
-const view = require('../lib/view');
-const images = require('../lib/images');
-const params = require('../lib/params');
-const connect = require('../lib/connect');
+const core = require('../lib/platform/core');
+const view = require('../lib/webview/view');
+const images = require('../lib/platform/images');
+const params = require('../lib/platform/params');
+const connect = require('../lib/platform/connect');
 const { load, examplePath, workspace, catalog } = require('./helpers');
 
 test('platform view renders and escapes', () => {
@@ -129,7 +129,7 @@ test('platform view: signal layer draws interrupt and stream lines between block
   // The UART's console is a byte stream to a block that is on no bus.
   assert.strictEqual(by('pl011_uart_0', 'charbackend_stdio_0').kind, 'stream');
   // A collapsed subsystem is one end for everything inside it.
-  const rs = require('../lib/restructure');
+  const rs = require('../lib/platform/restructure');
   const text = fs.readFileSync(examplePath, 'utf8');
   const g = JSON.parse(rs.groupText(text, rs.groupPlan(JSON.parse(text), ['pl011_uart_0', 'virtioblk_0'], 'periph')));
   const svg2 = view.diagram(core.analyze(g), new Set(['periph']));
@@ -157,7 +157,7 @@ test('platform view: replace and multiple selection controls', () => {
 });
 
 test('summary strip: dividers drawn per figure, not by showing the border color', () => {
-  const { css } = require('../lib/webtheme');
+  const { css } = require('../lib/webview/webtheme');
   const stats = /\.stats\{[^}]*\}/.exec(css)[0];
   // An empty cell at the end of a wrapped row showed the border color: a bright block in high-contrast themes.
   assert.ok(!/background:var\(--vp-border\)/.test(stats), stats);
@@ -216,7 +216,7 @@ test('view: Transactions tab in the dock, and the page script compiles', () => {
 });
 
 test('webviews: the scripts of the profile and CPU register pages compile', () => {
-  for (const html of [require('../lib/profileview').render('N2', 'x', 'Profile'), require('../lib/cpuregsview').render('N2', 'x')]) {
+  for (const html of [require('../lib/webview/profileview').render('N2', 'x', 'Profile'), require('../lib/webview/cpuregsview').render('N2', 'x')]) {
     const scripts = [...html.matchAll(/<script nonce="N2">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
     assert.ok(scripts.length >= 1);
     for (const src of scripts) assert.doesNotThrow(() => new Function(src));

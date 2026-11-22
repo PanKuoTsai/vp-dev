@@ -4,12 +4,12 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
-const trace = require('../lib/trace');
+const core = require('../lib/platform/core');
+const trace = require('../lib/analysis/trace');
 const { load } = require('./helpers');
 
 test('cpu registers: groups, PSTATE, changes, compact SIMD values, the view', () => {
-  const cr = require('../lib/cpuregs');
+  const cr = require('../lib/debug/cpuregs');
   assert.deepStrictEqual(['x0', 'x30', 'sp', 'pc', 'cpsr', 'v31', 'fpsr', 'SCTLR_EL1', 'tpidr', 'w3', 'q0', 'b31'].map(cr.classify),
     ['general', 'general', 'general', 'general', 'general', 'fp', 'fp', 'system', 'system', 'alias', 'alias', 'alias']);
   // cpsr as QEMU's gdbstub gave it for a CPU idling in the kernel: N set, IRQ and FIQ masked, EL1 on SP_EL1.
@@ -27,13 +27,13 @@ test('cpu registers: groups, PSTATE, changes, compact SIMD values, the view', ()
   vals['register-values'][1].value = '0x3';
   assert.deepStrictEqual(cr.snapshot(names, vals, prev).filter((r) => r.changed).map((r) => r.name), ['x1']);
   assert.strictEqual(cr.valuesCommand(8), '-data-list-register-values --thread 8 --frame 0 x');
-  const html = require('../lib/cpuregsview').render('N3', 'x');
+  const html = require('../lib/webview/cpuregsview').render('N3', 'x');
   assert.ok(html.includes("script-src 'nonce-N3'") && html.includes('id="g-system"') && html.includes("post({ type: 'ready' })"));
   assert.ok(!/<[a-z]+ [^>]*style="/.test(html.replace(/<style[\s\S]*?<\/style>/, '')));
 });
 
 test('kernel sources: map a build path to a local tree, and gdb gets it at attach', () => {
-  const gl = require('../lib/guestlinux');
+  const gl = require('../lib/debug/guestlinux');
   const local = new Set(['/home/me/linux/arch/arm64/kernel/idle.c']);
   const m = gl.sourceMapping('/build/linux-oPNunh/linux-5.15.0/arch/arm64/kernel/idle.c', '/home/me/linux/', (p) => local.has(p));
   assert.deepStrictEqual(m, { from: '/build/linux-oPNunh/linux-5.15.0', to: '/home/me/linux', file: '/home/me/linux/arch/arm64/kernel/idle.c' });
@@ -47,7 +47,7 @@ test('kernel sources: map a build path to a local tree, and gdb gets it at attac
 });
 
 test('debug port (G-13): module wiring for the Ubuntu example and the OpenOCD configuration', () => {
-  const dd = require('../lib/debugdap');
+  const dd = require('../lib/debug/debugdap');
   const d = load();
   const t = dd.targets(d);
   assert.deepStrictEqual(t.cpus.map((c) => c.name), ['cpu_0', 'cpu_1', 'cpu_2', 'cpu_3', 'cpu_4', 'cpu_5', 'cpu_6', 'cpu_7']);
@@ -72,7 +72,7 @@ test('debug port (G-13): module wiring for the Ubuntu example and the OpenOCD co
   // No Arm CPU: nothing to halt.
   assert.throws(() => dd.dapModule({ schemaVersion: '0.1', name: 'x', modules: { ram: { type: 'gs_memory' } } }, 1), /no Arm CPU/);
   // Where the probes come from, by agent version: QBox's components from 0.14.0, the agent's library before.
-  const at = (v) => trace.probeLibraries(v, '/x/vp_sim_agent', require('../lib/pin').versionAtLeast);
+  const at = (v) => trace.probeLibraries(v, '/x/vp_sim_agent', require('../lib/setup/pin').versionAtLeast);
   assert.deepStrictEqual(at('0.14.0'), { probes: 'probes', dap: null, types: { tracer: 'tracer', signal: 'signal_tracer', dap: 'debug_dap' }, inQbox: true, files: ['probes.so', 'debug_dap.so'] });
   assert.deepStrictEqual(at('0.13.0'), { probes: '/x/vp_sim_agent', dap: '/x/vp_sim_agent', types: { tracer: 'vp_tracer', signal: 'vp_signal_tracer', dap: 'vp_debug_dap' }, inQbox: false, files: [] });
   const t2 = trace.traceOptions(d, ['pl011_uart_0.target_socket'], at('0.14.0').probes);
@@ -96,7 +96,7 @@ test('debug port (G-13): module wiring for the Ubuntu example and the OpenOCD co
 });
 
 test('guest linux: the CDT evaluate answers of -vp-ps and -vp-dmesg', () => {
-  const gl = require('../lib/guestlinux');
+  const gl = require('../lib/debug/guestlinux');
   // As CDT returns them: the MI result as JSON, every value a string, plus CDT's own keys.
   const proc = (pid, tgid, ppid, comm, o = {}) => Object.assign({ pid: String(pid), tgid: String(tgid), ppid: String(ppid), uid: '0', state: 'S', cpu: '0', running: '-1', kernel: '0', comm, task: '0xffff0001' }, o);
   const body = { result: JSON.stringify({
@@ -138,7 +138,7 @@ test('guest linux: the CDT evaluate answers of -vp-ps and -vp-dmesg', () => {
 });
 
 test('guest linux: loading the gdb script', () => {
-  const gl = require('../lib/guestlinux');
+  const gl = require('../lib/debug/guestlinux');
   assert.deepStrictEqual(gl.evaluateArgs('-vp-ps -t'), { expression: '>-vp-ps -t', context: 'repl' });
   assert.strictEqual(gl.notLoaded('Undefined MI command: vp-ps'), true);
   assert.strictEqual(gl.notLoaded('The target is running: pause it first.'), false);
@@ -158,7 +158,7 @@ test('guest linux: loading the gdb script', () => {
 });
 
 test('third-party debuggers: gdbstub of the platform, TRACE32 script and guide', () => {
-  const tp = require('../lib/thirdparty');
+  const tp = require('../lib/debug/thirdparty');
   const d = load();
   let g = tp.gdbTarget(d, undefined, { port: 4321 });
   assert.deepStrictEqual(g, { port: 4321, source: 'debug-start', cpu: 'cpu_0', type: 'cpu_arm_cortexA76', cores: 8 });

@@ -247,7 +247,7 @@ struct Profiler {
  * instruction count to a per-vCPU counter, inline.
  *
  * An exception taken right after a call shows as a call to the vector; tail
- * calls (plain B) are not seen. The reader (lib/ftrace.js) matches returns to
+ * calls (plain B) are not seen. The reader (lib/analysis/ftrace.js) matches returns to
  * calls by return address and copes with both.
  */
 struct FTracer {

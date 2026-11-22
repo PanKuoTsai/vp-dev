@@ -8,7 +8,7 @@ const os = require('os');
 const crypto = require('crypto');
 
 test('kit file names: one .tar.gz, never doubled by a save dialog', () => {
-  const kit = require('../lib/kit');
+  const kit = require('../lib/setup/kit');
   assert.strictEqual(kit.kitFileName('/w/kits/p-kit.tar.gz'), '/w/kits/p-kit.tar.gz');
   // VS Code's own save dialog appends the filter's extension again.
   assert.strictEqual(kit.kitFileName('/w/kits/p-kit.tar.gz.tar.gz'), '/w/kits/p-kit.tar.gz');
@@ -21,7 +21,7 @@ test('kit file names: one .tar.gz, never doubled by a save dialog', () => {
 });
 
 testAsync('kit: tar archives with long names, read back and by GNU tar', async () => {
-  const tar = require('../lib/tar');
+  const tar = require('../lib/setup/tar');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-tar-'));
   const big = path.join(dir, 'big.bin');
   fs.writeFileSync(big, Buffer.alloc(70000, 7));
@@ -62,7 +62,7 @@ testAsync('kit: tar archives with long names, read back and by GNU tar', async (
 });
 
 testAsync('kit: plan, export and import of a platform with its files and a model', async () => {
-  const kit = require('../lib/kit');
+  const kit = require('../lib/setup/kit');
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-kit-'));
   const w = (rel, data) => { const f = path.join(base, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, data); return f; };
   w('src/common/u.lua', '-- prelude');

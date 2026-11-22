@@ -8,7 +8,7 @@ const os = require('os');
 const { load } = require('./helpers');
 
 test('remote: settings, ports, paths and the ssh command line', () => {
-  const remote = require('../lib/remote');
+  const remote = require('../lib/sim/remote');
   assert.strictEqual(remote.config({ host: '' }), undefined);
   assert.throws(() => remote.config({ host: '-oProxyCommand=x', root: '/r' }), /ssh destination/);
   assert.throws(() => remote.config({ host: 'sim', root: 'qbox' }), /absolute path/);
@@ -47,7 +47,7 @@ test('remote: settings, ports, paths and the ssh command line', () => {
 });
 
 test('remote from Windows: local C:\\ paths map to the Linux host, in paths and in generated text', () => {
-  const remote = require('../lib/remote');
+  const remote = require('../lib/sim/remote');
   assert.ok(remote.isWindowsPath('C:\\work') && remote.isWindowsPath('c:/work') && remote.isWindowsPath('\\\\srv\\share'));
   assert.ok(!remote.isWindowsPath('/home/me') && !remote.isWindowsPath('work'));
   // VS Code gives c:\ (lower case) for the workspace and C:\ elsewhere: the same folder.
@@ -57,7 +57,7 @@ test('remote from Windows: local C:\\ paths map to the Linux host, in paths and 
   assert.strictEqual(remote.mapPath('C:\\Users\\me\\work', '/r/work', 'C:\\Users\\me\\work2\\x'), undefined);
   assert.strictEqual(remote.mapPath('C:\\Users\\me\\work', '/r/work', 'D:\\Users\\me\\work\\x'), undefined);
   // In Lua (luaStr doubles backslashes), plain, and with / — all become /r/... with / inside.
-  const core = require('../lib/core');
+  const core = require('../lib/platform/core');
   const lua = core.generate({ schemaVersion: '0.1', name: 'w', modules: { m_0: { type: 'mymodel' } } },
     { libraries: { mymodel: 'C:\\Users\\me\\work\\models\\m\\build\\mymodel' } });
   assert.match(lua, /dylib_path = "C:\\\\Users\\\\me\\\\work\\\\models/);
@@ -80,7 +80,7 @@ test('remote from Windows: local C:\\ paths map to the Linux host, in paths and 
 });
 
 testAsync('remote: checking and uploading files with the remote shell commands', async () => {
-  const remote = require('../lib/remote');
+  const remote = require('../lib/sim/remote');
   const { spawn } = require('child_process');
   // "ssh" that runs the remote command in a local shell, so the commands themselves are tested.
   const calls = [];
@@ -132,7 +132,7 @@ testAsync('remote: checking and uploading files with the remote shell commands',
   const rmodel = path.join(there, 'models', 'm');
   fs.mkdirSync(path.join(rmodel, 'build'), { recursive: true });
   fs.writeFileSync(path.join(rmodel, 'build', 'm.so'), 'remote build');
-  await remote.uploadFiles(rc, entries, rmodel, require('../lib/tar').write, path.join(dir, 'up.tar.gz'), { spawnFn });
+  await remote.uploadFiles(rc, entries, rmodel, require('../lib/setup/tar').write, path.join(dir, 'up.tar.gz'), { spawnFn });
   assert.strictEqual(fs.readFileSync(path.join(rmodel, 'src', 'm.cc'), 'utf8'), '// m');
   assert.strictEqual(fs.readFileSync(path.join(rmodel, 'build', 'm.so'), 'utf8'), 'remote build');
   assert.ok(!fs.existsSync(path.join(dir, 'up.tar.gz')));
@@ -140,8 +140,8 @@ testAsync('remote: checking and uploading files with the remote shell commands',
 });
 
 testAsync('remote password login: askpass server, launcher and helper; ssh options and hooks', async () => {
-  const askpass = require('../lib/askpass');
-  const remote = require('../lib/remote');
+  const askpass = require('../lib/sim/askpass');
+  const remote = require('../lib/sim/remote');
   const { spawnSync, spawn } = require('child_process');
   assert.strictEqual(askpass.promptKind("me@sim's password: "), 'password');
   assert.strictEqual(askpass.promptKind('Enter passphrase for key /home/me/.ssh/id_ed25519: '), 'password');
@@ -200,7 +200,7 @@ testAsync('remote password login: askpass server, launcher and helper; ssh optio
   // On Windows the launcher is vp-askpass.exe (OpenSSH for Windows runs only .exe as SSH_ASKPASS):
   // shipped next to askpass.js, a 64-bit Windows program built from tools/askpass/vp-askpass.c.
   const exe = askpass.writeLauncher(path.join(os.tmpdir(), 'unused'), 'win32');
-  assert.strictEqual(exe, path.join(__dirname, '..', 'lib', 'vp-askpass.exe'));
+  assert.strictEqual(exe, path.join(__dirname, '..', 'lib', 'sim', 'vp-askpass.exe'));
   const pe = fs.readFileSync(exe);
   assert.strictEqual(pe.toString('latin1', 0, 2), 'MZ');
   const peAt = pe.readUInt32LE(0x3c);
@@ -246,7 +246,7 @@ testAsync('remote password login: askpass server, launcher and helper; ssh optio
 });
 
 testAsync('remote: the simulator is found when a QBox or build folder was given for it', async () => {
-  const remote = require('../lib/remote');
+  const remote = require('../lib/sim/remote');
   const { spawn } = require('child_process');
   const spawnFn = (cmd, args, opts) => spawn('bash', ['-c', args[args.length - 1]], opts);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-exe-'));

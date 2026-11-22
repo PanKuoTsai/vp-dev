@@ -2,7 +2,7 @@
 // Run with: node test/simagent.test.js (every file: npm test)
 const { test, testAsync } = require('./harness');
 const assert = require('assert');
-const agent = require('../lib/simagent');
+const agent = require('../lib/sim/simagent');
 
 /** A fake agent: answers each request line with reply(msg), which may return a string, object or undefined. */
 function fakeAgent(reply) {

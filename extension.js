@@ -4,46 +4,46 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
-const core = require('./lib/core');
-const view = require('./lib/view');
-const images = require('./lib/images');
-const jsonedit = require('./lib/jsonedit');
-const simagent = require('./lib/simagent');
-const debugdap = require('./lib/debugdap');
-const qboxsetup = require('./lib/qboxsetup');
-const qboxview = require('./lib/qboxview');
-const params = require('./lib/params');
-const modules = require('./lib/modules');
-const connect = require('./lib/connect');
-const hostports = require('./lib/hostports');
-const disklock = require('./lib/disklock');
-const trace = require('./lib/trace');
-const traceview = require('./lib/traceview');
-const pin = require('./lib/pin');
-const diskspace = require('./lib/diskspace');
-const modelgen = require('./lib/modelgen');
-const models = require('./lib/models');
-const launch = require('./lib/launch');
-const registers = require('./lib/registers');
-const elfsym = require('./lib/elfsym');
-const profile = require('./lib/profile');
-const ftrace = require('./lib/ftrace');
+const core = require('./lib/platform/core');
+const view = require('./lib/webview/view');
+const images = require('./lib/platform/images');
+const jsonedit = require('./lib/platform/jsonedit');
+const simagent = require('./lib/sim/simagent');
+const debugdap = require('./lib/debug/debugdap');
+const qboxsetup = require('./lib/setup/qboxsetup');
+const qboxview = require('./lib/webview/qboxview');
+const params = require('./lib/platform/params');
+const modules = require('./lib/platform/modules');
+const connect = require('./lib/platform/connect');
+const hostports = require('./lib/sim/hostports');
+const disklock = require('./lib/sim/disklock');
+const trace = require('./lib/analysis/trace');
+const traceview = require('./lib/webview/traceview');
+const pin = require('./lib/setup/pin');
+const diskspace = require('./lib/sim/diskspace');
+const modelgen = require('./lib/generate/modelgen');
+const models = require('./lib/generate/models');
+const launch = require('./lib/sim/launch');
+const registers = require('./lib/analysis/registers');
+const elfsym = require('./lib/analysis/elfsym');
+const profile = require('./lib/analysis/profile');
+const ftrace = require('./lib/analysis/ftrace');
 const menu = require('./lib/menu');
-const profileview = require('./lib/profileview');
-const perf = require('./lib/perf');
-const perfview = require('./lib/perfview');
-const guestlinux = require('./lib/guestlinux');
-const kit = require('./lib/kit');
-const checkpoint = require('./lib/checkpoint');
-const ipxact = require('./lib/ipxact');
-const thirdparty = require('./lib/thirdparty');
-const remote = require('./lib/remote');
-const askpass = require('./lib/askpass');
-const devicetree = require('./lib/devicetree');
-const dtcompare = require('./lib/dtcompare');
-const restructure = require('./lib/restructure');
-const cpuregs = require('./lib/cpuregs');
-const cpuregsview = require('./lib/cpuregsview');
+const profileview = require('./lib/webview/profileview');
+const perf = require('./lib/analysis/perf');
+const perfview = require('./lib/webview/perfview');
+const guestlinux = require('./lib/debug/guestlinux');
+const kit = require('./lib/setup/kit');
+const checkpoint = require('./lib/sim/checkpoint');
+const ipxact = require('./lib/generate/ipxact');
+const thirdparty = require('./lib/debug/thirdparty');
+const remote = require('./lib/sim/remote');
+const askpass = require('./lib/sim/askpass');
+const devicetree = require('./lib/generate/devicetree');
+const dtcompare = require('./lib/generate/dtcompare');
+const restructure = require('./lib/platform/restructure');
+const cpuregs = require('./lib/debug/cpuregs');
+const cpuregsview = require('./lib/webview/cpuregsview');
 
 const SUFFIX = '.platform.json';
 const isPlatform = (doc) => !!doc && doc.fileName.endsWith(SUFFIX);
@@ -1538,7 +1538,7 @@ function remoteSettings() {
 
 // ------------------------------------------------------------------ password login (vpStudio.remote.auth)
 //
-// ssh asks through VP Studio's askpass program (lib/askpass.js); the password
+// ssh asks through VP Studio's askpass program (lib/sim/askpass.js); the password
 // is asked once in VS Code and kept in this window's memory, or, when the user
 // chooses so, in VS Code's secret storage (the Windows Credential Manager, the
 // login keyring on Linux).
@@ -1868,7 +1868,7 @@ async function uploadBuildSources(rc, homeDir, dirs) {
     walk(`tools/${d}`);
   }
   const tmp = path.join(os.tmpdir(), `vp-studio-src-${process.pid}-${Date.now()}.tar.gz`);
-  await remote.uploadTree(rc, entries, `${homeDir}/.vp-studio/src`, require('./lib/tar').write, tmp);
+  await remote.uploadTree(rc, entries, `${homeDir}/.vp-studio/src`, require('./lib/setup/tar').write, tmp);
 }
 
 /** Build a library of VP Studio on the remote host against its QBox, in a terminal task. */
@@ -1979,7 +1979,7 @@ async function cmdRemoteBuildModel(arg) {
   if (!rc) return;
   await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Sending ${name} to ${rc.host}` }, async () => {
     await uploadBuildSources(rc, homeDir, ['model-build', 'qbox-catalog']);
-    await remote.uploadFiles(rc, remote.folderEntries(dir, (rel) => !/^build(\/|$)/.test(rel)), remoteDir, require('./lib/tar').write,
+    await remote.uploadFiles(rc, remote.folderEntries(dir, (rel) => !/^build(\/|$)/.test(rel)), remoteDir, require('./lib/setup/tar').write,
       path.join(os.tmpdir(), `vp-studio-model-${process.pid}-${Date.now()}.tar.gz`));
   });
   const script = `${homeDir}/.vp-studio/src/tools/model-build/build.sh`;
@@ -2840,7 +2840,7 @@ function loadProfileSymbols() {
 
 /**
  * KASLR offset of an arm64 Linux kernel: find the loaded image with the arm64
- * Image magic and read the kimage_vaddr it relocated at boot (lib/profile.js).
+ * Image magic and read the kimage_vaddr it relocated at boot (lib/analysis/profile.js).
  * 0 when it cannot tell (no such symbol, image or bus access).
  */
 async function findKernelOffset(symbols) {

@@ -2,10 +2,10 @@
 // Run with: node test/connect.test.js (every file: npm test)
 const { test } = require('./harness');
 const assert = require('assert');
-const core = require('../lib/core');
-const jsonedit = require('../lib/jsonedit');
-const modules = require('../lib/modules');
-const connect = require('../lib/connect');
+const core = require('../lib/platform/core');
+const jsonedit = require('../lib/platform/jsonedit');
+const modules = require('../lib/platform/modules');
+const connect = require('../lib/platform/connect');
 const { load, catalog, exampleText } = require('./helpers');
 
 test('connections: port rows show bindings in both directions', () => {

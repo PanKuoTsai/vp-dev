@@ -4,7 +4,7 @@ const { test, testAsync } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
+const core = require('../lib/platform/core');
 const os = require('os');
 const { load } = require('./helpers');
 
@@ -25,10 +25,10 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
   assert.deepStrictEqual(a.routers, []);
   assert.deepStrictEqual(a.problems, []);
   assert.deepStrictEqual(a.memoryMap.map((r) => [r.instance, r.bus]), [['ddr', 'bus']]);
-  assert.strictEqual(require('../lib/trace').tracePoints(d).length, 0);
-  assert.strictEqual(require('../lib/dataflow').hasDataFlow(a, 'cpu'), true);
+  assert.strictEqual(require('../lib/analysis/trace').tracePoints(d).length, 0);
+  assert.strictEqual(require('../lib/platform/dataflow').hasDataFlow(a, 'cpu'), true);
   // The connect flow treats at_bus like a router: the device end writes the binding.
-  assert.strictEqual(require('../lib/connect').declaringEnd(d, 'ddr', 'bus'), 'a');
+  assert.strictEqual(require('../lib/platform/connect').declaringEnd(d, 'ddr', 'bus'), 'a');
   // A QEMU-style initiator on an at_bus is flagged.
   const bad = JSON.parse(JSON.stringify(d));
   bad.modules.load = { type: 'loader', ports: { initiator_socket: { bind: 'bus.target_socket' } } };
@@ -39,7 +39,7 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
   assert.deepStrictEqual(a2.problems, []);
   assert.deepStrictEqual(a2.memoryMap.map((r) => [r.instance, Number(r.start), Number(r.size)]), [['ddr0', 0, 0x20000000], ['ddr1', 0x20000000, 0x20000000]]);
   const sw2 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'ddr-2ch.perfsweep.json'), 'utf8'));
-  assert.deepStrictEqual(require('../lib/perf').checkSweep(sw2, d2), []);
+  assert.deepStrictEqual(require('../lib/analysis/perf').checkSweep(sw2, d2), []);
   // Each generator stays in its channel.
   const inCh = (g, base) => { const p = d2.modules[g].params; return Number(p.address) >= base && Number(p.address) + Number(p.size) <= base + 0x20000000; };
   assert.ok(inCh('display', 0) && inCh('dma', 0x20000000) && inCh('cpu', 0x20000000));
@@ -51,7 +51,7 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
   assert.deepStrictEqual(a3.memoryMap.map((r) => [r.instance, Number(r.start), Number(r.size)]), [['ddr0', 0, 0x80000000], ['ddr1', 0x80000000, 0x60000000]]);
   assert.deepStrictEqual(a3.buses.map((b) => b.name || b).sort(), ['mau0', 'mau1']);
   const sw3 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'mau-qos.perfsweep.json'), 'utf8'));
-  assert.deepStrictEqual(require('../lib/perf').checkSweep(sw3, d3), []);
+  assert.deepStrictEqual(require('../lib/analysis/perf').checkSweep(sw3, d3), []);
   const ext = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
   const listed = JSON.parse(/const PERF_EXAMPLES = (\[[^\]]*\]);/.exec(ext)[1].replace(/'/g, '"'));
   assert.deepStrictEqual(listed.slice().sort(), fs.readdirSync(path.join(__dirname, '..', 'examples', 'perf')).filter((f) => f.endsWith('.json')).sort());
@@ -72,7 +72,7 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
 });
 
 test('perf: statistics, metric paths, sweeps, checks and CSV', () => {
-  const perf = require('../lib/perf');
+  const perf = require('../lib/analysis/perf');
   assert.throws(() => perf.parseStats('{"a":1}'), /not a VP Studio perf statistics file/);
   const st = perf.parseStats(JSON.stringify(PERF_STATS));
   assert.strictEqual(perf.metric(st, 'initiators.cpu.latencyNs.p99'), 180);
@@ -141,9 +141,9 @@ test('perf: statistics, metric paths, sweeps, checks and CSV', () => {
 });
 
 test('perf: at_bus QoS per master (masters): parsing, checks, sweeps and statistics', () => {
-  const qos = require('../lib/qos');
-  const perf = require('../lib/perf');
-  const core = require('../lib/core');
+  const qos = require('../lib/analysis/qos');
+  const perf = require('../lib/analysis/perf');
+  const core = require('../lib/platform/core');
   // The text perf.so reads.
   const p = qos.parseMasters('display: priority=3 min_mbps=6000;\n cpu@ddr0: max_mbps=8000, outstanding=8 ; ');
   assert.deepStrictEqual(p.errors, []);
@@ -208,9 +208,9 @@ test('perf: at_bus QoS per master (masters): parsing, checks, sweeps and statist
 });
 
 test('perf: a system bus (crossbar) in front of two MAUs: relative_addresses, QoS behind a bus, data flow, statistics', () => {
-  const core = require('../lib/core');
-  const perf = require('../lib/perf');
-  const dataflow = require('../lib/dataflow');
+  const core = require('../lib/platform/core');
+  const perf = require('../lib/analysis/perf');
+  const dataflow = require('../lib/platform/dataflow');
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
   const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'mau-sysbus.platform.json'), 'utf8'));
   const a = core.analyze(d, { catalog: cat });
@@ -265,7 +265,7 @@ test('perf: a system bus (crossbar) in front of two MAUs: relative_addresses, Qo
 });
 
 test('perf: the Performance panel has no style attributes and its script compiles', () => {
-  const pv = require('../lib/perfview');
+  const pv = require('../lib/webview/perfview');
   const html = pv.render('N3', 'x', 'Performance: t');
   assert.ok(!/<[a-z]+ [^>]*style="/.test(html.replace(/<style[\s\S]*?<\/style>/, '')));
   const scripts = [...html.matchAll(/<script nonce="N3">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
@@ -275,7 +275,7 @@ test('perf: the Performance panel has no style attributes and its script compile
 });
 
 testAsync('perf: a sweep runs every combination with a stand-in simulator and keeps going after a failed run', async () => {
-  const perf = require('../lib/perf');
+  const perf = require('../lib/analysis/perf');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-perf-'));
   // The stand-in reads the Lua, writes statistics where it is told, bandwidth = 100 x max_outstanding;
   // max_outstanding 3 "crashes" without statistics.

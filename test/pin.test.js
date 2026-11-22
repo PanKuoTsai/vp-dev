@@ -5,7 +5,7 @@ const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const pin = require('../lib/pin');
+const pin = require('../lib/setup/pin');
 
 const C1 = 'a'.repeat(40), C2 = 'b'.repeat(40), C3 = 'c'.repeat(40);
 
@@ -108,7 +108,7 @@ test('pin: versionReport finds the QBox of the simulator and reports mismatches'
 });
 
 test('pin: whether the pinned patches are applied, without git', () => {
-  const pin = require('../lib/pin');
+  const pin = require('../lib/setup/pin');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-patch-'));
   fs.mkdirSync(path.join(root, 'hw'));
   const patch = 'Subject: [PATCH] t\n---\n--- a/hw/x.c\n+++ b/hw/x.c\n@@ -1,2 +1,3 @@\n int a;\n+int marker = 1;\n-old();\n+  new();\n';

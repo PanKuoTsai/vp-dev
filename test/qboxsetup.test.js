@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 test('Build QBox, first build: QBox folder, CPM source cache and build-qbox.sh arguments', () => {
-  const qs = require('../lib/qboxsetup');
+  const qs = require('../lib/setup/qboxsetup');
   const os = require('os');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-qbox-setup-'));
   try {
@@ -46,8 +46,8 @@ test('Build QBox, first build: QBox folder, CPM source cache and build-qbox.sh a
 });
 
 test('QBox patch 0002: VP Studio components as a patch, registered in the pin, detected applied or not', () => {
-  const pinLib = require('../lib/pin');
-  const qs = require('../lib/qboxsetup');
+  const pinLib = require('../lib/setup/pin');
+  const qs = require('../lib/setup/qboxsetup');
   const os = require('os');
   const pin = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'qbox.pin.json'), 'utf8'));
   const rel = 'patches/qbox/0002-vp-studio-probes-debug-dap.patch';
@@ -108,19 +108,19 @@ test('QBox patch 0003: the perf models, registered after 0002, away from 0002\'s
   assert.deepStrictEqual(cat.modules.at_bus.introspection.ports.map((p) => [p.name, p.kind]), [['target_socket', 'tlm_target'], ['initiator_socket', 'tlm_initiator']]);
   assert.ok(cat.modules.dram_ctrl.introspection.params.some((p) => p.name === 'scheduler' && p.default === 'fr_fcfs'));
   // Add Module writes the library: the types are not named like it.
-  assert.deepStrictEqual(require('../lib/modules').moduleDef(cat, 'traffic_gen'), { type: 'traffic_gen', dylib: 'perf' });
-  // perf 1.1.0: QoS per master on at_bus, priority scheduling in dram_ctrl; perf.so and lib/qos.js know the same keys.
+  assert.deepStrictEqual(require('../lib/platform/modules').moduleDef(cat, 'traffic_gen'), { type: 'traffic_gen', dylib: 'perf' });
+  // perf 1.1.0: QoS per master on at_bus, priority scheduling in dram_ctrl; perf.so and lib/analysis/qos.js know the same keys.
   assert.ok(cat.modules.at_bus.introspection.params.some((p) => p.name === 'masters' && p.default === ''));
   assert.ok(cat.modules.dram_ctrl.introspection.params.some((p) => p.name === 'qos' && p.default === false));
   assert.match(text, /PERF_VERSION "1\.2\.0"/);
   // perf 1.2.0: a crossbar, and buses behind buses.
   assert.ok(cat.modules.at_bus.introspection.params.some((p) => p.name === 'topology' && p.default === 'shared'));
   assert.ok(cat.modules.at_bus.introspection.params.some((p) => p.name === 'input_queue' && p.default === 1));
-  for (const k of Object.keys(require('../lib/qos').KEYS)) assert.ok(text.includes(`k == "${k}"`), k);
+  for (const k of Object.keys(require('../lib/analysis/qos').KEYS)) assert.ok(text.includes(`k == "${k}"`), k);
 });
 
 test('Build QBox: CMake Tools configuring QBox by itself, and turning it off', () => {
-  const qs = require('../lib/qboxsetup');
+  const qs = require('../lib/setup/qboxsetup');
   const os = require('os');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-qbox-cmt-'));
   try {
@@ -166,7 +166,7 @@ test('Build QBox: CMake Tools configuring QBox by itself, and turning it off', (
 });
 
 test('Build QBox view: what the build directory was configured with, defaults that change nothing, checks', () => {
-  const qs = require('../lib/qboxsetup');
+  const qs = require('../lib/setup/qboxsetup');
   const os = require('os');
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-qbox-view-'));
   try {
@@ -223,7 +223,7 @@ test('Build QBox view: what the build directory was configured with, defaults th
 });
 
 test('Build QBox view: the page script compiles, no style attributes, stable ids', () => {
-  const html = require('../lib/qboxview').render('N3', 'x');
+  const html = require('../lib/webview/qboxview').render('N3', 'x');
   const scripts = [...html.matchAll(/<script nonce="N3">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
   assert.ok(scripts.length === 1);
   assert.doesNotThrow(() => new Function(scripts[0]));

@@ -4,10 +4,10 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const core = require('../lib/core');
-const view = require('../lib/view');
+const core = require('../lib/platform/core');
+const view = require('../lib/webview/view');
 const os = require('os');
-const images = require('../lib/images');
+const images = require('../lib/platform/images');
 const { load, workspace, catalog } = require('./helpers');
 
 /** Minimal little-endian ELF64 with the given PT_LOAD segments. */
@@ -155,7 +155,7 @@ test('images: rebuildEntries keeps raw entries and extra keys', () => {
 
 test('images: the files a loader would fail on at start', () => {
   const os = require('os');
-  const images = require('../lib/images');
+  const images = require('../lib/platform/images');
   const top = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-img-'));
   fs.mkdirSync(path.join(top, 'fw', 'Artifacts'), { recursive: true });
   for (const f of ['Image.bin', 'image_ext4_initrd.img']) fs.writeFileSync(path.join(top, 'fw', 'Artifacts', f), 'x');

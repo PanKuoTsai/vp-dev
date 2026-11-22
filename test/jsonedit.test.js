@@ -3,7 +3,7 @@
 const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
-const jsonedit = require('../lib/jsonedit');
+const jsonedit = require('../lib/platform/jsonedit');
 const { examplePath } = require('./helpers');
 
 test('jsonedit: replacing entries changes only that array', () => {
