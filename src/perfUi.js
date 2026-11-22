@@ -113,21 +113,21 @@ async function cmdPerfRun(arg) {
   const ch = common.outputChannel();
   ch.appendLine(`\n=== Performance run of ${name} (${new Date().toLocaleString()})`);
   shared.perfAbort = { aborted: false };
-  let r;
-  try {
-    r = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Performance run: ${name}`, cancellable: true }, (progress, token) => {
-      token.onCancellationRequested(() => { shared.perfAbort.aborted = true; if (shared.perfAbort.onAbort) shared.perfAbort.onAbort(); });
-      return perf.runExperiment({
-        doc: loaded.data, platformFile: uri.fsPath, exe: sim.exePath, cwd: sim.cwd, outFile, timeoutMs: perfTimeoutMs(), signal: shared.perfAbort,
-        generateOptions: { libraries: models.libraries(catalogUi.catalog()) }, onOutput: (t) => ch.append(t),
-      });
+  const end = await perf.outcome(() => vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Performance run: ${name}`, cancellable: true }, (progress, token) => {
+    token.onCancellationRequested(() => { shared.perfAbort.aborted = true; if (shared.perfAbort.onAbort) shared.perfAbort.onAbort(); });
+    return perf.runExperiment({
+      doc: loaded.data, platformFile: uri.fsPath, exe: sim.exePath, cwd: sim.cwd, outFile, timeoutMs: perfTimeoutMs(), signal: shared.perfAbort,
+      generateOptions: { libraries: models.libraries(catalogUi.catalog()) }, onOutput: (t) => ch.append(t),
     });
-  } finally {
-    const aborted = shared.perfAbort.aborted;
-    shared.perfAbort = undefined;
-    // eslint-disable-next-line no-unsafe-finally -- a stopped run ends here, whatever the simulator reported when it was stopped
-    if (aborted) { perfStatus('idle', 'Stopped', false); return; }
-  }
+  }), shared.perfAbort);
+  shared.perfAbort = undefined;
+  // Stopped by the user: that is the result, whatever the simulator reported as it was stopped
+  // (runExperiment calls a killed simulator a failed run).
+  if (end.stopped) { perfStatus('idle', 'Stopped', false); return; }
+  // The run could not be made at all (the results folder cannot be written, say): the caller
+  // shows the error, and the panel must not go on saying "Running".
+  if (end.error) { perfStatus('bad', 'Failed', false, end.error.message); throw end.error; }
+  const r = end.value;
   if (r.stats) {
     shared.perfShown = { type: 'run', summary: perf.summary(r.stats), stats: r.stats, platform: path.basename(uri.fsPath), file: outFile };
     postPerf(shared.perfShown);
@@ -187,25 +187,29 @@ async function cmdPerfSweep(arg) {
   const ch = common.outputChannel();
   ch.appendLine(`\n=== Performance sweep ${name}: ${total} runs into ${outDir}`);
   shared.perfAbort = { aborted: false };
-  let results;
-  try {
-    results = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Performance sweep: ${name}`, cancellable: true }, (progress, token) => {
-      token.onCancellationRequested(() => { shared.perfAbort.aborted = true; if (shared.perfAbort.onAbort) shared.perfAbort.onAbort(); });
-      return perf.runSweep({
-        spec, doc: loaded.data, platformFile, exe: sim.exePath, cwd: sim.cwd, outDir, specFile: file.fsPath, signal: shared.perfAbort,
-        jobs: Number(common.cfg().get('perf.jobs')) || undefined,
-        timeoutMs: perfTimeoutMs(),
-        generateOptions: { libraries: models.libraries(catalogUi.catalog()) },
-        onProgress: ({ done, run }) => {
-          progress.report({ increment: 100 / total, message: `${done} of ${total}` });
-          perfStatus('live', `Running ${done} of ${total}`, true);
-          ch.appendLine(`run ${run.index} (${run.label}): ${run.ok ? `ok, ${run.seconds.toFixed(1)} s` : run.error}`);
-        },
-      });
+  const end = await perf.outcome(() => vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Performance sweep: ${name}`, cancellable: true }, (progress, token) => {
+    token.onCancellationRequested(() => { shared.perfAbort.aborted = true; if (shared.perfAbort.onAbort) shared.perfAbort.onAbort(); });
+    return perf.runSweep({
+      spec, doc: loaded.data, platformFile, exe: sim.exePath, cwd: sim.cwd, outDir, specFile: file.fsPath, signal: shared.perfAbort,
+      jobs: Number(common.cfg().get('perf.jobs')) || undefined,
+      timeoutMs: perfTimeoutMs(),
+      generateOptions: { libraries: models.libraries(catalogUi.catalog()) },
+      onProgress: ({ done, run }) => {
+        progress.report({ increment: 100 / total, message: `${done} of ${total}` });
+        perfStatus('live', `Running ${done} of ${total}`, true);
+        ch.appendLine(`run ${run.index} (${run.label}): ${run.ok ? `ok, ${run.seconds.toFixed(1)} s` : run.error}`);
+      },
     });
-  } finally {
-    shared.perfAbort = undefined;
+  }), shared.perfAbort);
+  shared.perfAbort = undefined;
+  // A stopped sweep still gives the runs it finished (results.cancelled). Without results the sweep
+  // could not be made or written (the results folder, a full disk): the caller shows the error,
+  // and the panel must not go on saying "Running".
+  if (end.error) {
+    perfStatus(end.stopped ? 'idle' : 'bad', end.stopped ? 'Stopped' : 'Failed', false, end.stopped ? undefined : end.error.message);
+    throw end.error;
   }
+  const results = end.value;
   shared.perfShown = { type: 'sweep', results };
   postPerf(shared.perfShown);
   const failedRuns = results.runs.filter((r) => !r.ok).length;

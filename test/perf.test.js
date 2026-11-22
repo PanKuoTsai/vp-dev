@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const core = require('../lib/platform/core');
 const os = require('os');
-const { load, extensionSource } = require('./helpers');
+const { load, extensionSource, extensionFiles } = require('./helpers');
 
 const PERF_STATS = {
   format: 'vp-perf-stats', version: 1, complete: true, simTimeNs: 1000000,
@@ -330,4 +330,35 @@ fs.writeFileSync(out,JSON.stringify({format:'vp-perf-stats',version:1,complete:t
   assert.throws(() => vprun.parseArgs(['--perf-sweep', specFile, 'p.platform.json']), /give no platform file/);
   assert.throws(() => vprun.parseArgs(['--perf', '--expect', 'x', 'p.platform.json']), /takes no steps/);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+testAsync('perf: how a run that can be stopped ended (done, stopped, could not be made), and the panel\'s use of it', async () => {
+  const perf = require('../lib/analysis/perf');
+  // Done.
+  assert.deepStrictEqual(await perf.outcome(async () => ({ ok: true }), { aborted: false }), { stopped: false, value: { ok: true }, error: undefined });
+  // Stopped while it ran: the run still resolves, with what the stopped simulator left.
+  const signal = { aborted: false };
+  const stopped = await perf.outcome(async () => { signal.aborted = true; return { ok: false, error: 'no statistics were written (exit SIGHUP)' }; }, signal);
+  assert.strictEqual(stopped.stopped, true);
+  assert.strictEqual(stopped.value.ok, false);
+  // Could not be made: the error is given, not thrown, so the caller can set its status first.
+  const failed = await perf.outcome(() => { throw new Error('EACCES: permission denied, mkdir perf-results'); }, { aborted: false });
+  assert.ok(!failed.stopped && failed.value === undefined && /EACCES/.test(failed.error.message));
+  const rejected = await perf.outcome(() => Promise.reject(new Error('gone')), undefined);
+  assert.ok(!rejected.stopped && rejected.error.message === 'gone');
+  // A real case of "could not be made": the results folder is a file.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-perf-outcome-'));
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'ddr-contention.platform.json'), 'utf8'));
+  fs.writeFileSync(path.join(dir, 'perf-results'), 'not a folder');
+  const made = await perf.outcome(() => perf.runExperiment({ doc: d, platformFile: path.join(dir, 'p.platform.json'), exe: 'none', cwd: dir, outFile: path.join(dir, 'perf-results', 'p.perf.json') }), { aborted: false });
+  assert.ok(made.error && !made.stopped, 'runExperiment rejects when it cannot make the results folder');
+  fs.rmSync(dir, { recursive: true, force: true });
+  // The panel (src/perfUi.js): after either kind of run the Stop state is cleared, a stopped run says
+  // "Stopped", and a run that could not be made says "Failed" before the error goes to the caller,
+  // so the panel does not stay on "Running". No return inside a finally block.
+  const ui = extensionFiles().find(([name]) => name.replace(/\\/g, '/') === 'src/perfUi.js')[1];
+  assert.strictEqual((ui.match(/const end = await perf\.outcome\(/g) || []).length, 2);
+  assert.strictEqual((ui.match(/\), shared\.perfAbort\);\r?\n {2}shared\.perfAbort = undefined;/g) || []).length, 2);
+  assert.match(ui, /if \(end\.stopped\) \{ perfStatus\('idle', 'Stopped', false\); return; \}\r?\n(?: {2}\/\/[^\n]*\n)* {2}if \(end\.error\) \{ perfStatus\('bad', 'Failed', false, end\.error\.message\); throw end\.error; \}/);
+  assert.ok(!/finally/.test(ui) && !/no-unsafe-finally/.test(ui));
 });
