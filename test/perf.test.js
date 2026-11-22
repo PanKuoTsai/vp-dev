@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const core = require('../lib/platform/core');
 const os = require('os');
-const { load } = require('./helpers');
+const { load, extensionSource } = require('./helpers');
 
 const PERF_STATS = {
   format: 'vp-perf-stats', version: 1, complete: true, simTimeNs: 1000000,
@@ -52,7 +52,7 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
   assert.deepStrictEqual(a3.buses.map((b) => b.name || b).sort(), ['mau0', 'mau1']);
   const sw3 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'mau-qos.perfsweep.json'), 'utf8'));
   assert.deepStrictEqual(require('../lib/analysis/perf').checkSweep(sw3, d3), []);
-  const ext = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const ext = extensionSource();
   const listed = JSON.parse(/const PERF_EXAMPLES = (\[[^\]]*\]);/.exec(ext)[1].replace(/'/g, '"'));
   assert.deepStrictEqual(listed.slice().sort(), fs.readdirSync(path.join(__dirname, '..', 'examples', 'perf')).filter((f) => f.endsWith('.json')).sort());
   // The Ubuntu example: routers and buses are the same.

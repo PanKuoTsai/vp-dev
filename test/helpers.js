@@ -21,4 +21,10 @@ const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog',
 
 const exampleText = () => fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8');
 
-module.exports = { load, examplePath, workspace, catalog, exampleText };
+// The extension's own sources: extension.js and src/*.js, as [name, text].
+const extensionFiles = () => [path.join(__dirname, '..', 'extension.js'),
+  ...fs.readdirSync(path.join(__dirname, '..', 'src')).filter((f) => f.endsWith('.js')).sort().map((f) => path.join(__dirname, '..', 'src', f))]
+  .map((f) => [path.relative(path.join(__dirname, '..'), f), fs.readFileSync(f, 'utf8')]);
+const extensionSource = () => extensionFiles().map((f) => f[1]).join('\n');
+
+module.exports = { load, examplePath, workspace, catalog, exampleText, extensionFiles, extensionSource };

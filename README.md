@@ -227,7 +227,16 @@ bin/vp-run --qbox ~/qbox --perf-sweep examples/perf/cpu-outstanding.perfsweep.js
 ## 專案結構
 
 ```
-extension.js                 VS Code 整合：指令、診斷、樹狀檢視、webview、終端機
+extension.js                 VS Code 進入點：註冊指令、檢視與各種 provider（activate、deactivate）
+src/                         VS Code 整合：指令、診斷、樹狀檢視、webview、終端機，依功能分檔
+  shared.js                  執行期間的共用狀態（檢視與面板、執行中的模擬、sim agent 連線），各檔經由同一個物件讀寫
+  common.js                  各檔都用到的小工具：設定、平台檔副檔名、擴充套件資料夾、輸出頻道、工作目錄
+  platformFiles.js           平台檔：選取、載入、診斷、產生 Lua
+  platformView.js            平台檢視面板；platformEdit.js 是面板送回的編輯（映像檔、模組、連線、重整）
+  simUi.js                   啟動與停止模擬；agentUi.js 是 sim agent 連線、暫停與繼續；remoteUi.js、askpassUi.js 是遠端模擬
+  traceUi.js、profileUi.js、ftraceUi.js、perfUi.js、registersUi.js、paramsUi.js   各分析面板與檢視
+  debugUi.js、linuxUi.js     除錯設定、OpenOCD 埠、CPU 暫存器、Linux 感知
+  其餘                       catalogUi、devicetreeUi、modelUi、qboxUi、versionUi、checkpointUi、kitUi、examplesUi、modulesTree、menuUi
 lib/                         核心邏輯，都不依賴 VS Code，可單獨測試；擴充套件與 vp-run 共用
 lib/platform/                平台描述：展開與分析、Lua 產生、依元件目錄檢查、保留格式的 JSON 編輯
   core.js                    展開、分析、Lua 產生（不依賴 VS Code，可單獨測試）

@@ -4,6 +4,7 @@ const { test } = require('./harness');
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+const { extensionFiles, extensionSource } = require('./helpers');
 
 test('settings that name this machine\'s programs and hosts are machine-overridable', () => {
   // In a VS Code Remote-SSH window the extension runs on the Linux machine; the
@@ -17,14 +18,14 @@ test('settings that name this machine\'s programs and hosts are machine-overrida
 });
 
 test('tasks set their working folder (no ${workspaceFolder} when no folder is open)', () => {
-  const ext = fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8');
+  const ext = extensionSource();
   const execs = ext.match(/new vscode\.(Shell|Process)Execution\([^\n]*/g) || [];
   assert.ok(execs.length >= 4, execs.length);
-  for (const e of execs) assert.match(e, /cwd: taskCwd\(/, e);
+  for (const e of execs) assert.match(e, /cwd: (common\.)?taskCwd\(/, e);
 });
 
-test('Windows: extension.js parses, local-only commands are hidden by vpStudio.localSim', () => {
-  new (require('vm').Script)(fs.readFileSync(path.join(__dirname, '..', 'extension.js'), 'utf8'));
+test('Windows: extension.js and src/ parse, local-only commands are hidden by vpStudio.localSim', () => {
+  for (const [name, text] of extensionFiles()) new (require('vm').Script)(text, { filename: name });
   const menu = require('../lib/menu');
   const titles = menu.titlesFrom(require('../package.json'));
   const shown = (ctx) => menu.visible(ctx, titles).flatMap((g) => g.items.map((i) => i.command));
