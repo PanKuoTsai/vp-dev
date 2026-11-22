@@ -42,7 +42,7 @@ QBox's own code and is edited as a patch.
 |---|---|---|
 | `0001-mttcg-register-woken-cpu.patch` | Multi-CPU MTTCG platforms sometimes end right after `SC_START` with no output (VP Studio known issue K-01). | Verified 2026-11-15 (boots and QBox's 415 tests), see below. Draft report ready, not yet sent. |
 | `0002-vp-studio-probes-debug-dap.patch` | Adds VP Studio's SystemC components: `systemc-components/probes` (`build/probes.so`: types `tracer`, `signal_tracer` and the trace store the sim agent links to) and `systemc-components/debug_dap` (`build/debug_dap.so`: type `debug_dap`, the OpenOCD port). Required: the sim agent does not build without it. | New files plus two lines in `systemc-components/CMakeLists.txt`. Not for upstream. |
-| `0003-vp-studio-perf-models.patch` | Adds `systemc-components/perf` (`build/perf.so`: types `traffic_gen`, `at_bus`, `dram_ctrl`, `perf_stats`; perf 1.1.0 with QoS per master), VP Studio's architecture exploration models (Run Performance Experiment, vp-run --perf). Applies after 0002. | New files plus two lines in `systemc-components/CMakeLists.txt`. Not for upstream. |
+| `0003-vp-studio-perf-models.patch` | Adds `systemc-components/perf` (`build/perf.so`: types `traffic_gen`, `at_bus`, `dram_ctrl`, `perf_stats`; perf 1.2.0: QoS per master, crossbar topology), VP Studio's architecture exploration models (Run Performance Experiment, vp-run --perf). Applies after 0002. | New files plus two lines in `systemc-components/CMakeLists.txt`. Not for upstream. |
 
 ## 0001: register a woken MTTCG CPU's quantum keeper from the waker
 
@@ -101,21 +101,15 @@ with QBox (`gs_create_dymod`), like its other components:
   `src/debug_dap.cc`. Module type `debug_dap` (remote_bitbang JTAG, ADIv5
   DP, MEM-AP and APB-AP, external debug registers and CTIs).
 
-The source of truth is the user's development QBox. After changing these
-components there, regenerate the patch against the pinned commit, without
-touching that QBox's git index:
+The source is in `src/0002-vp-studio-probes-debug-dap/tree/` (see
+[Changing 0002 or 0003](#changing-0002-or-0003)). To build a change before
+committing it, copy that tree over a QBox that has the patch applied and build
+the two libraries; after changing `probes.h`, rebuild the sim agent as well:
 
 ```sh
-cd <qbox>
-export GIT_INDEX_FILE=$(mktemp -u)
-git read-tree HEAD
-git add systemc-components/CMakeLists.txt systemc-components/probes systemc-components/debug_dap
-git diff --cached HEAD    # the body of the patch, after its From/Subject header
-rm -f "$GIT_INDEX_FILE"; unset GIT_INDEX_FILE
+cp -r patches/qbox/src/0002-vp-studio-probes-debug-dap/tree/. <qbox>/
+cmake --build <qbox>/build --target probes debug_dap
 ```
-
-The CMakeLists.txt part of 0002 must not have the perf line: take the lines
-for probes and debug_dap only (or regenerate 0003 too, below).
 
 ## 0003: VP Studio's perf models
 
@@ -141,17 +135,19 @@ far ahead when saturated, which left nothing for the scheduler to reorder.
 The values above are unchanged with 1.1.0; the bundled examples move by at
 most 3% (ddr-contention, ddr-2ch) and their checks fail in the same runs.
 
+perf 1.2.0 (2026-11-21) adds `topology` on at_bus (`shared`, or `crossbar`
+with a request channel per target and a response channel per initiator port),
+`input_queue` (requests a port can queue for arbitration), QoS keyed by the
+master rather than the port so that a bus behind another bus still tells the
+masters apart, and an error count on traffic_gen: failed accesses no longer
+count as bandwidth.
+
 The patch applies after 0002 (its CMakeLists.txt part is against the file
-with 0002's lines). Regenerate it from the user's QBox with a base tree that
-has 0002 applied:
+with 0002's lines; `changes.diff` in its source folder is written that way).
+The source is in `src/0003-vp-studio-perf-models/tree/`. To build a change
+before committing it:
 
 ```sh
-cd <qbox>
-export GIT_INDEX_FILE=$(mktemp -u)
-git read-tree HEAD
-git apply --cached <vp-studio>/patches/qbox/0002-vp-studio-probes-debug-dap.patch
-base=$(git write-tree)
-git add systemc-components/CMakeLists.txt systemc-components/perf
-git diff --cached $base   # the body of the patch, after its From/Subject header
-rm -f "$GIT_INDEX_FILE"; unset GIT_INDEX_FILE
+cp -r patches/qbox/src/0003-vp-studio-perf-models/tree/. <qbox>/
+cmake --build <qbox>/build --target perf
 ```
