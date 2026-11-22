@@ -52,7 +52,8 @@ code --install-extension vp-studio-0.2.*.vsix   # vsce 依 package.json 的版�
 
 - `npm test`：執行 `test/` 下的全部測試，不需要先 `npm install`。執行過 `npm install` 之後，測試還會以 ajv 檢查範本與暫存器描述是否符合 `schemas/`（四份 schema 都是 JSON Schema draft-07）。
 - `npm run lint`：ESLint（設定在 `eslint.config.js`）；先執行一次 `npm install` 取得 ESLint，需要 Node.js 20.19 以上。
-- 推送到 `main` 與每個 pull request 都會由 GitHub Actions 在 Linux 上執行這兩項（`.github/workflows/ci.yml`）。
+- `npm run typecheck`：以 TypeScript 檢查 JavaScript 原始碼的型別（不編譯）。既有的發現記在 `dev/typecheck-baseline.txt`，只有新出現的才算失敗；說明見 `dev/typecheck.js` 開頭。
+- 推送到 `main` 與每個 pull request 都會由 GitHub Actions 在 Linux 上執行以上三項（`.github/workflows/ci.yml`）。
 
 ## 文件
 
@@ -66,3 +67,4 @@ code --install-extension vp-studio-0.2.*.vsix   # vsce 依 package.json 的版�
 | [設定](docs/settings.md) | `vpStudio.*` 各項設定與預設值 |
 | [專案結構](docs/structure.md) | 每個資料夾與檔案放什麼 |
 | [theia/README.md](theia/README.md) | 獨立版（Theia）的建置與執行 |
+| [CHANGELOG.md](CHANGELOG.md) | 各版本的變更 |

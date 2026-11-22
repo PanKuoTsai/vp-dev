@@ -139,4 +139,8 @@ async function handleProfileMessage(m) {
   await refreshProfile();
 }
 
-Object.assign(exports, { cmdStartProfile, showProfilePanel, loadProfileSymbols, findKernelOffset, profileConnected });
+exports.cmdStartProfile = cmdStartProfile;
+exports.showProfilePanel = showProfilePanel;
+exports.loadProfileSymbols = loadProfileSymbols;
+exports.findKernelOffset = findKernelOffset;
+exports.profileConnected = profileConnected;

@@ -105,6 +105,8 @@ test/harness.js              test、testAsync（非同步測試排在所有同�
 test/helpers.js              多個測試檔共用的範例平台、元件目錄與暫存工作區
 .github/workflows/ci.yml     CI：在 Linux 上以 Node.js 18 與 22 執行 npm test，並執行 npm run lint
 eslint.config.js             ESLint 設定（npm run lint；先 npm install 取得 ESLint）
+dev/                         開發用、不出貨：typecheck.js（npm run typecheck）、它的 tsconfig.json 與既有發現的基準清單
+CHANGELOG.md                 各版本的變更
 INSTALL.md                   安裝與第一次使用（給新使用者）
 docs/                        功能說明、驗證狀態、除錯、命令列與 CI、設定、專案結構（由 README.md 連結）
 ```

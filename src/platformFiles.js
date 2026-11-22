@@ -116,4 +116,10 @@ async function generateText(uri, options) {
   return { lua, data: loaded.data };
 }
 
-Object.assign(exports, { pickPlatform, load, locate, refreshDiagnostics, luaPathFor, generateFor, generateText });
+exports.pickPlatform = pickPlatform;
+exports.load = load;
+exports.locate = locate;
+exports.refreshDiagnostics = refreshDiagnostics;
+exports.luaPathFor = luaPathFor;
+exports.generateFor = generateFor;
+exports.generateText = generateText;

@@ -92,4 +92,7 @@ async function renderPanel(uri, panel) {
   }
 }
 
-Object.assign(exports, { cmdShowPlatform, collapsedFor, saveCollapsed, renderPanel });
+exports.cmdShowPlatform = cmdShowPlatform;
+exports.collapsedFor = collapsedFor;
+exports.saveCollapsed = saveCollapsed;
+exports.renderPanel = renderPanel;

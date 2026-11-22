@@ -257,4 +257,7 @@ async function cmdPerfOpen(arg) {
   postPerf(shared.perfShown);
 }
 
-Object.assign(exports, { cmdPerfRun, cmdPerfSweep, cmdPerfNewSweep, cmdPerfOpen });
+exports.cmdPerfRun = cmdPerfRun;
+exports.cmdPerfSweep = cmdPerfSweep;
+exports.cmdPerfNewSweep = cmdPerfNewSweep;
+exports.cmdPerfOpen = cmdPerfOpen;

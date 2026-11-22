@@ -229,4 +229,9 @@ async function cmdImportIpxact(arg) {
   vscode.window.showInformationMessage(`Wrote ${vscode.workspace.asRelativePath(out)}: the Peripheral Registers view shows these ${desc.registers.length} registers for every ${ty.t} on a bus.${report()}`);
 }
 
-Object.assign(exports, { isModel, refreshModelDiagnostics, pickModel, generateModel, cmdNewModel, cmdImportIpxact });
+exports.isModel = isModel;
+exports.refreshModelDiagnostics = refreshModelDiagnostics;
+exports.pickModel = pickModel;
+exports.generateModel = generateModel;
+exports.cmdNewModel = cmdNewModel;
+exports.cmdImportIpxact = cmdImportIpxact;

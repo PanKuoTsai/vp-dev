@@ -1,0 +1,19 @@
+{
+  // Type checking of the JavaScript sources: npm run typecheck (dev/typecheck.js).
+  // Nothing is compiled. This file is in dev/ and not at the root so that an
+  // editor does not show the findings of dev/typecheck-baseline.txt in every file.
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2022",
+    "module": "commonjs",
+    "strict": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node", "vscode"]
+  },
+  // The extension, the libraries and the command line. Not the page scripts
+  // (media/, they run in a webview) and not the tests.
+  "include": ["../extension.js", "../src/**/*.js", "../lib/**/*.js", "../bin/**/*.js", "../patches/make-patches.js"]
+}

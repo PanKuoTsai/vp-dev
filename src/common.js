@@ -78,7 +78,16 @@ function pickMany(items, options = {}) {
   });
 }
 
-Object.assign(exports, {
-  ROOT, SUFFIX, isPlatform, cfg, shq, IS_WINDOWS, panels, pendingSelect, pendingRoute, outputChannel, taskCwd,
-  showMarkdown, pickMany,
-});
+exports.ROOT = ROOT;
+exports.SUFFIX = SUFFIX;
+exports.isPlatform = isPlatform;
+exports.cfg = cfg;
+exports.shq = shq;
+exports.IS_WINDOWS = IS_WINDOWS;
+exports.panels = panels;
+exports.pendingSelect = pendingSelect;
+exports.pendingRoute = pendingRoute;
+exports.outputChannel = outputChannel;
+exports.taskCwd = taskCwd;
+exports.showMarkdown = showMarkdown;
+exports.pickMany = pickMany;

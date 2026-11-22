@@ -54,4 +54,5 @@ function cmdCheckQBox() {
   vscode.window.showInformationMessage(w ? `QBox version check: ${w} mismatch${w > 1 ? 'es' : ''}; see the VP Studio output.` : `QBox version check: the simulator, catalog and sim agent match${r.pinned && r.simulator && r.simulator.commit === r.pinned ? ' the tested QBox ' + pin.short(r.pinned) : ''}.`);
 }
 
-Object.assign(exports, { warnVersions, cmdCheckQBox });
+exports.warnVersions = warnVersions;
+exports.cmdCheckQBox = cmdCheckQBox;

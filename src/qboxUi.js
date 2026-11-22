@@ -297,4 +297,7 @@ async function cmdBuildModel(arg) {
   }
 }
 
-Object.assign(exports, { cmdBuildQbox, cmdBuildSimAgent, cmdBuildBundled, cmdBuildModel });
+exports.cmdBuildQbox = cmdBuildQbox;
+exports.cmdBuildSimAgent = cmdBuildSimAgent;
+exports.cmdBuildBundled = cmdBuildBundled;
+exports.cmdBuildModel = cmdBuildModel;

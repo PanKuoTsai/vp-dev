@@ -1,0 +1,111 @@
+bin/vp-run.js TS2322 Type 'boolean' is not assignable to type 'void'.
+bin/vp-run.js TS2322 Type 'boolean' is not assignable to type 'void'.
+bin/vp-run.js TS2353 Object literal may only specify known properties, and 'catalog' does not exist in type '{ buses?: any[]; descs?: any[]; overrides?: any[]; }'.
+bin/vp-run.js TS2353 Object literal may only specify known properties, and 'platformText' does not exist in type '{ paused?: boolean; snapshot?: boolean; }'.
+extension.js TS2339 Property 'onDidChangeActiveStackItem' does not exist on type 'typeof debug'.
+extension.js TS2339 Property 'onDidChangeActiveStackItem' does not exist on type 'typeof debug'.
+lib/analysis/ftrace.js TS2339 Property 'jsonFile' does not exist on type '{ limit?: number; offset?: bigint; title?: string; }'.
+lib/analysis/ftrace.js TS2339 Property 'note' does not exist on type '{ title?: string; }'.
+lib/analysis/ftrace.js TS2339 Property 'symbolFile' does not exist on type '{ limit?: number; offset?: bigint; title?: string; }'.
+lib/analysis/ftrace.js TS2339 Property 'traceFile' does not exist on type '{ limit?: number; offset?: bigint; title?: string; }'.
+lib/analysis/perf.js TS2339 Property 'extraModules' does not exist on type '{}'.
+lib/analysis/perf.js TS2339 Property 'extraModules' does not exist on type '{}'.
+lib/analysis/perf.js TS2339 Property 'overrides' does not exist on type '{}'.
+lib/analysis/perf.js TS2339 Property 'overrides' does not exist on type '{}'.
+lib/analysis/perf.js TS2741 Property 'onOutput' is missing in type '{ doc: any; platformFile: any; exe: any; cwd: any; generateOptions: any; timeoutMs: any; signal: { onAbort: any; }; tag: string; outFile: string; overrides: ({ instance: any; param: any; } & { value: any; })[]; }' but required in type '{ cwd: any; doc: any; exe: any; generateOptions: any; onOutput: any; outFile: any; overrides?: any[]; platformFile: any; signal: any; tag?: string; timeoutMs: any; }'.
+lib/generate/ipxact.js TS2339 Property 'existing' does not exist on type '{}'.
+lib/generate/ipxact.js TS2339 Property 'name' does not exist on type '{}'.
+lib/generate/ipxact.js TS2339 Property 'test' does not exist on type 'string | RegExp'.
+lib/generate/ipxact.js TS2339 Property 'title' does not exist on type '{ port?: string; }'.
+lib/generate/ipxact.js TS2339 Property 'types' does not exist on type '{ port?: string; }'.
+lib/generate/ipxact.js TS2554 Expected 0 arguments, but got 1.
+lib/generate/modelgen.js TS2365 Operator '&' cannot be applied to types 'number' and 'bigint'.
+lib/menu.js TS2741 Property 'icon' is missing in type '{ id: string; label: string; }' but required in type '{ id: string; label: string; icon: string; }'.
+lib/setup/kit.js TS2339 Property 'code' does not exist on type 'Error'.
+lib/setup/kit.js TS2353 Object literal may only specify known properties, and 'signal' does not exist in type '{ gzip?: boolean; level?: number; }'.
+lib/setup/tar.js TS2339 Property 'onProgress' does not exist on type '{ gzip?: boolean; level?: number; }'.
+lib/setup/tar.js TS2339 Property 'onProgress' does not exist on type '{}'.
+lib/setup/tar.js TS2339 Property 'signal' does not exist on type '{ gzip?: boolean; level?: number; }'.
+lib/setup/tar.js TS2556 A spread argument must either have a tuple type or be passed to a rest parameter.
+lib/setup/tar.js TS2556 A spread argument must either have a tuple type or be passed to a rest parameter.
+lib/setup/tar.js TS2739 Type 'Gunzip' is missing the following properties from type 'ReadStream': path, pending
+lib/setup/tar.js TS2740 Type 'Writable' is missing the following properties from type 'ReadStream': close, bytesRead, path, pending, and 34 more.
+lib/setup/tar.js TS2740 Type 'WriteStream' is missing the following properties from type 'Readable': readableAborted, readable, readableDidRead, readableEncoding, and 30 more.
+lib/setup/tar.js TS2810 Expected 1 argument, but got 0. 'new Promise()' needs a JSDoc hint to produce a 'resolve' that can be called without arguments.
+lib/setup/tar.js TS2810 Expected 1 argument, but got 0. 'new Promise()' needs a JSDoc hint to produce a 'resolve' that can be called without arguments.
+lib/sim/askpass.js TS2339 Property 'port' does not exist on type 'string | AddressInfo'.
+lib/sim/checkpoint.js TS2339 Property 'catalog' does not exist on type '{ buses?: undefined[]; descs?: undefined[]; overrides?: undefined[]; }'.
+lib/sim/checkpoint.js TS2339 Property 'platformText' does not exist on type '{ paused?: boolean; snapshot?: boolean; }'.
+lib/sim/checkpoint.js TS2339 Property 'topDir' does not exist on type '{ buses?: undefined[]; descs?: undefined[]; overrides?: undefined[]; }'.
+lib/sim/checkpoint.js TS2554 Expected 0 arguments, but got 1.
+lib/sim/checkpoint.js TS2554 Expected 0 arguments, but got 1.
+lib/sim/checkpoint.js TS2554 Expected 0 arguments, but got 1.
+lib/sim/checkpoint.js TS2810 Expected 1 argument, but got 0. 'new Promise()' needs a JSDoc hint to produce a 'resolve' that can be called without arguments.
+lib/sim/hostports.js TS2339 Property 'port' does not exist on type 'string | AddressInfo'.
+lib/sim/launch.js TS2339 Property 'buses' does not exist on type '{ port: any; }'.
+lib/sim/launch.js TS2349 This expression is not callable.
+lib/sim/launch.js TS2810 Expected 1 argument, but got 0. 'new Promise()' needs a JSDoc hint to produce a 'resolve' that can be called without arguments.
+lib/sim/remote.js TS2339 Property 'code' does not exist on type 'Error'.
+lib/sim/remote.js TS2339 Property 'input' does not exist on type '{ binary?: boolean; spawnFn?: { (command: string, options?: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams; (command: string, options: SpawnOptionsWithStdioTuple<...>): ChildProcessByStdio<...>; (command: string, options: SpawnOptionsWithStdioTuple<...>): ChildProcessByStdio<...>; (command: string, option...'.
+lib/sim/remote.js TS2339 Property 'onProgress' does not exist on type '{}'.
+lib/sim/remote.js TS2339 Property 'onStdout' does not exist on type '{ binary?: boolean; spawnFn?: { (command: string, options?: SpawnOptionsWithoutStdio): ChildProcessWithoutNullStreams; (command: string, options: SpawnOptionsWithStdioTuple<...>): ChildProcessByStdio<...>; (command: string, options: SpawnOptionsWithStdioTuple<...>): ChildProcessByStdio<...>; (command: string, option...'.
+lib/sim/remote.js TS2339 Property 'spawnFn' does not exist on type '{}'.
+lib/sim/remote.js TS2339 Property 'sshStderr' does not exist on type 'Error'.
+lib/sim/remote.js TS2554 Expected 0 arguments, but got 1.
+lib/sim/simagent.js TS2339 Property 'port' does not exist on type 'string | AddressInfo'.
+lib/sim/simagent.js TS2362 The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+lib/sim/simagent.js TS2363 The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+lib/webview/view.js TS2349 This expression is not callable.
+lib/webview/view.js TS2365 Operator '*' cannot be applied to types 'number' and 'bigint'.
+lib/webview/view.js TS2365 Operator '+' cannot be applied to types 'number' and '1n'.
+lib/webview/view.js TS2365 Operator '+' cannot be applied to types 'number' and '1n'.
+lib/webview/view.js TS2365 Operator '+' cannot be applied to types 'number' and '1n'.
+src/checkpointUi.js TS2322 Type '(what: any) => void' is not assignable to type '() => void'.
+src/checkpointUi.js TS2353 Object literal may only specify known properties, and 'catalog' does not exist in type '{ buses?: any[]; descs?: any[]; overrides?: any[]; }'.
+src/devicetreeUi.js TS2345 Argument of type 'string | ((args: any, input: any) => Promise<any>)' is not assignable to parameter of type 'string'.
+src/devicetreeUi.js TS2345 Argument of type 'string | ((args: any, input: any) => Promise<any>)' is not assignable to parameter of type 'string'.
+src/ftraceUi.js TS2353 Object literal may only specify known properties, and 'symbolFile' does not exist in type '{ limit?: number; offset?: bigint; title?: string; }'.
+src/ftraceUi.js TS2741 Property 'events' is missing in type '{ live: boolean; }' but required in type '{ events: any; live: any; }'.
+src/linuxUi.js TS2339 Property 'activeStackItem' does not exist on type 'typeof debug'.
+src/linuxUi.js TS2554 Expected 1 arguments, but got 0.
+src/menuUi.js TS2554 Expected 1 arguments, but got 0.
+src/modelUi.js TS2339 Property 'kind' does not exist on type 'string[]'.
+src/modelUi.js TS2339 Property 'kind' does not exist on type 'string[]'.
+src/modelUi.js TS2339 Property 'label' does not exist on type 'string'.
+src/modelUi.js TS2353 Object literal may only specify known properties, and 'types' does not exist in type '{ port?: string; }'.
+src/modelUi.js TS2769 No overload matches this call.
+src/modulesTree.js TS2339 Property 'children' does not exist on type 'TreeItem'.
+src/modulesTree.js TS2339 Property 'children' does not exist on type 'TreeItem'.
+src/modulesTree.js TS2554 Expected 1 arguments, but got 0.
+src/paramsUi.js TS2554 Expected 1 arguments, but got 0.
+src/paramsUi.js TS2554 Expected 1 arguments, but got 0.
+src/perfUi.js TS2339 Property 'last' does not exist on type '(kind: any, text: any, running: any, warn: any) => void'.
+src/perfUi.js TS2339 Property 'last' does not exist on type '(kind: any, text: any, running: any, warn: any) => void'.
+src/perfUi.js TS2339 Property 'last' does not exist on type '(kind: any, text: any, running: any, warn: any) => void'.
+src/perfUi.js TS2339 Property 'last' does not exist on type '(kind: any, text: any, running: any, warn: any) => void'.
+src/platformEdit.js TS2339 Property 'label' does not exist on type 'string'.
+src/platformEdit.js TS2339 Property 'label' does not exist on type 'string'.
+src/platformEdit.js TS2339 Property 'label' does not exist on type 'string'.
+src/platformEdit.js TS2339 Property 'port' does not exist on type 'string'.
+src/platformEdit.js TS2769 No overload matches this call.
+src/profileUi.js TS2365 Operator '+' cannot be applied to types 'bigint' and 'number'.
+src/registersUi.js TS2554 Expected 1 arguments, but got 0.
+src/registersUi.js TS2554 Expected 1 arguments, but got 0.
+src/registersUi.js TS2554 Expected 1 arguments, but got 0.
+src/remoteUi.js TS2339 Property 'globalValue' does not exist on type '{}'.
+src/remoteUi.js TS2339 Property 'globalValue' does not exist on type '{}'.
+src/remoteUi.js TS2339 Property 'workspaceFolderValue' does not exist on type '{}'.
+src/remoteUi.js TS2339 Property 'workspaceFolderValue' does not exist on type '{}'.
+src/remoteUi.js TS2339 Property 'workspaceValue' does not exist on type '{}'.
+src/remoteUi.js TS2339 Property 'workspaceValue' does not exist on type '{}'.
+src/remoteUi.js TS2345 Argument of type '(rel: any) => boolean' is not assignable to parameter of type '() => boolean'.
+src/remoteUi.js TS2353 Object literal may only specify known properties, and 'type' does not exist in type '{ local: any; remote: any; role: any; }'.
+src/remoteUi.js TS2739 Type '{ agentLib: string; agentVersion: any; agentPort: any; traceIds: any; opts: any; }' is missing the following properties from type '{ agentLib: any; agentPort: any; agentVersion: any; opts: any; qboxBuild: any; restore: any; traceIds: any; }': qboxBuild, restore
+src/remoteUi.js TS2741 Property 'restore' is missing in type '{ uri: any; platform: { textDoc: vscode.TextDocument; data: any; }; options: { overrides: { instance: any; param: any; value: any; }[]; variableValues: { [k: string]: any; }; }; debug: any; port: any; ... 8 more ...; remoteInfo: { ...; }; }' but required in type '{ agentPort: any; debug: any; hostPortValues: any; movedPorts: any; options: any; opts: any; platform: any; port: any; probeIds: any; recording: any; remoteInfo: any; restore: any; traceIds: any; uri: any; where: any; }'.
+src/simUi.js TS2345 Argument of type '(what: any) => void' is not assignable to parameter of type '() => void'.
+src/simUi.js TS2353 Object literal may only specify known properties, and 'platformText' does not exist in type '{ paused?: boolean; snapshot?: boolean; }'.
+src/simUi.js TS2739 Type '{ uri: vscode.Uri; platform: { textDoc: vscode.TextDocument; data: any; }; options: { overrides: { instance: any; param: any; value: any; }[]; } | { overrides?: undefined; }; debug: any; ... 8 more ...; movedPorts: any[]; }' is missing the following properties from type '{ agentPort: any; debug: any; hostPortValues: any; movedPorts: any; options: any; opts: any; platform: any; port: any; probeIds: any; recording: any; remoteInfo: any; restore: any; traceIds: any; uri: any; where: any; }': remoteInfo, where
+src/traceUi.js TS2339 Property 'error' does not exist on type '{ added?: boolean; }'.
+src/traceUi.js TS2353 Object literal may only specify known properties, and 'error' does not exist in type '{ added?: boolean; }'.
+src/traceUi.js TS2353 Object literal may only specify known properties, and 'kind' does not exist in type '{ label: any; description: string; detail: string; picked: any; id: any; }'.
+src/traceUi.js TS2741 Property 'detail' is missing in type '{ label: any; description: string; picked: any; id: any; }' but required in type '{ label: any; description: string; detail: string; picked: any; id: any; }'.

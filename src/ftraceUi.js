@@ -141,4 +141,7 @@ async function convertFtrace(file, { live, events }) {
   else if (act === 'Reveal Timeline File') vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(jsonFile));
 }
 
-Object.assign(exports, { cmdStartFtrace, cmdFtraceRecord, cmdFtraceSave, cmdFtraceConvert });
+exports.cmdStartFtrace = cmdStartFtrace;
+exports.cmdFtraceRecord = cmdFtraceRecord;
+exports.cmdFtraceSave = cmdFtraceSave;
+exports.cmdFtraceConvert = cmdFtraceConvert;

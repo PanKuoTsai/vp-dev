@@ -193,4 +193,6 @@ async function cmdSetRegister(node) {
   shared.registerTree.emitter.fire();
 }
 
-Object.assign(exports, { RegisterTree, cmdReadRegister, cmdSetRegister });
+exports.RegisterTree = RegisterTree;
+exports.cmdReadRegister = cmdReadRegister;
+exports.cmdSetRegister = cmdSetRegister;

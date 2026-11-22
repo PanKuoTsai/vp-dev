@@ -273,4 +273,8 @@ async function cmdAddDebugConfigs(arg) {
     (added ? ' They need the CDT GDB Debug Adapter extension.' : ''));
 }
 
-Object.assign(exports, { cmdThirdPartyDebuggers, cmdStartOpenOcd, writeOpenOcdConfig, CpuRegsView, cmdAddDebugConfigs });
+exports.cmdThirdPartyDebuggers = cmdThirdPartyDebuggers;
+exports.cmdStartOpenOcd = cmdStartOpenOcd;
+exports.writeOpenOcdConfig = writeOpenOcdConfig;
+exports.CpuRegsView = CpuRegsView;
+exports.cmdAddDebugConfigs = cmdAddDebugConfigs;

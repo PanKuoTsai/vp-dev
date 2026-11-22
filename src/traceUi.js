@@ -361,4 +361,11 @@ async function cmdStartTrace(context, arg) {
   await simUi.start(uri, false, ids);
 }
 
-Object.assign(exports, { showHit, showTracePanel, txWatch, txState, traceConnected, traceDisconnected, cmdChooseProbes, cmdStartTrace });
+exports.showHit = showHit;
+exports.showTracePanel = showTracePanel;
+exports.txWatch = txWatch;
+exports.txState = txState;
+exports.traceConnected = traceConnected;
+exports.traceDisconnected = traceDisconnected;
+exports.cmdChooseProbes = cmdChooseProbes;
+exports.cmdStartTrace = cmdStartTrace;

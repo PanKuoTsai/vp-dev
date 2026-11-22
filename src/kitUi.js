@@ -220,4 +220,5 @@ async function omittedPrompt(dir, o) {
   vscode.window.showInformationMessage(`Copied ${name} into the kit.`);
 }
 
-Object.assign(exports, { cmdExportKit, cmdOpenKit });
+exports.cmdExportKit = cmdExportKit;
+exports.cmdOpenKit = cmdOpenKit;

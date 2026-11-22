@@ -3,7 +3,9 @@
 #   test  npm test on Linux, with the oldest Node.js VP Studio supports and a
 #         current one. The tests need no npm install: VP Studio has no
 #         dependencies.
-#   lint  npm run lint (ESLint, eslint.config.js).
+#   lint  npm run lint (ESLint, eslint.config.js), npm run typecheck
+#         (TypeScript on the JavaScript sources, dev/typecheck.js) and the
+#         tests once more with the development dependencies.
 #
 # This does not start a simulation: that needs a QBox build. examples/ci shows
 # how to boot a platform with vp-run on a runner that has one.
@@ -44,6 +46,7 @@ jobs:
           cache: npm
       - run: npm ci --no-audit --no-fund
       - run: npm run lint
+      - run: npm run typecheck
       # With the development dependencies installed, the tests also check the
       # templates and register descriptions against the schemas (ajv).
       - run: npm test

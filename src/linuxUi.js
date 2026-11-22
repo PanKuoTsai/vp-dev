@@ -199,4 +199,8 @@ const linuxConfigProvider = {
   },
 };
 
-Object.assign(exports, { DEBUG_TYPE, GuestTree, cmdMapSources, cmdShowKernelLog, linuxConfigProvider });
+exports.DEBUG_TYPE = DEBUG_TYPE;
+exports.GuestTree = GuestTree;
+exports.cmdMapSources = cmdMapSources;
+exports.cmdShowKernelLog = cmdShowKernelLog;
+exports.linuxConfigProvider = linuxConfigProvider;

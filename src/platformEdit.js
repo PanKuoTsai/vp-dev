@@ -519,4 +519,6 @@ async function handleFormMessage(uri, msg, reply) {
   }
 }
 
-Object.assign(exports, { editPlatform, cmdAddModule, handleFormMessage });
+exports.editPlatform = editPlatform;
+exports.cmdAddModule = cmdAddModule;
+exports.handleFormMessage = handleFormMessage;

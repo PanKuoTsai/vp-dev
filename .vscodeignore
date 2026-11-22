@@ -19,6 +19,7 @@ patches/*/src/**
 .github/**
 eslint.config.js
 package-lock.json
+dev/**
 .claude/**
 .vscode/**
 theia/**

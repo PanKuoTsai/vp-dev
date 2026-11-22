@@ -126,4 +126,6 @@ async function cmdCopyParam(node) {
   if (node && node.param) await vscode.env.clipboard.writeText(`${node.param.name} = ${JSON.stringify(node.param.value)}`);
 }
 
-Object.assign(exports, { ParamTree, cmdSetParam, cmdCopyParam });
+exports.ParamTree = ParamTree;
+exports.cmdSetParam = cmdSetParam;
+exports.cmdCopyParam = cmdCopyParam;

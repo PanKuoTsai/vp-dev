@@ -456,7 +456,11 @@ async function cmdSelectHost() {
   await cmdCheckRemote();
 }
 
-Object.assign(exports, {
-  needHost, localOnly, remoteSettings, startRemote, cmdRemoteBuild, cmdRemoteBuildModel, cmdCheckRemote,
-  cmdSelectHost,
-});
+exports.needHost = needHost;
+exports.localOnly = localOnly;
+exports.remoteSettings = remoteSettings;
+exports.startRemote = startRemote;
+exports.cmdRemoteBuild = cmdRemoteBuild;
+exports.cmdRemoteBuildModel = cmdRemoteBuildModel;
+exports.cmdCheckRemote = cmdCheckRemote;
+exports.cmdSelectHost = cmdSelectHost;

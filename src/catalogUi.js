@@ -112,7 +112,11 @@ async function refreshModelCatalogs() {
 
 const analyzeWithCatalog = (data) => core.analyze(data, { catalog: catalog() });
 
-Object.assign(exports, {
-  catalog, BUNDLED, buildDir, firstExisting, bundledCatalogFile, catalogToolPath, refreshModelCatalogs,
-  analyzeWithCatalog,
-});
+exports.catalog = catalog;
+exports.BUNDLED = BUNDLED;
+exports.buildDir = buildDir;
+exports.firstExisting = firstExisting;
+exports.bundledCatalogFile = bundledCatalogFile;
+exports.catalogToolPath = catalogToolPath;
+exports.refreshModelCatalogs = refreshModelCatalogs;
+exports.analyzeWithCatalog = analyzeWithCatalog;

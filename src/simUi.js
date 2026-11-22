@@ -367,4 +367,10 @@ function setRunning(running, detail) {
   shared.statusItem.show();
 }
 
-Object.assign(exports, { cmdGenerate, addAgentOptions, afterStart, start, simulatorPath, cmdStop, setRunning });
+exports.cmdGenerate = cmdGenerate;
+exports.addAgentOptions = addAgentOptions;
+exports.afterStart = afterStart;
+exports.start = start;
+exports.simulatorPath = simulatorPath;
+exports.cmdStop = cmdStop;
+exports.setRunning = setRunning;

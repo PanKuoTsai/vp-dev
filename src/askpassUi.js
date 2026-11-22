@@ -129,4 +129,7 @@ async function cmdForgetPassword() {
   vscode.window.showInformationMessage(`VP Studio forgot the password of ${host}.${common.cfg().get('remote.auth') === 'password' ? ' It asks again at the next login.' : ''}`);
 }
 
-Object.assign(exports, { ensureAskpass, askpassFor, offerPasswordLogin, cmdForgetPassword });
+exports.ensureAskpass = ensureAskpass;
+exports.askpassFor = askpassFor;
+exports.offerPasswordLogin = offerPasswordLogin;
+exports.cmdForgetPassword = cmdForgetPassword;

@@ -113,4 +113,5 @@ async function cmdStartFromCheckpoint(arg) {
   await simUi.start(uri, how.debug, [], { restore: { dir: pick.c.dir, manifest: pick.c.manifest } });
 }
 
-Object.assign(exports, { cmdSaveCheckpoint, cmdStartFromCheckpoint });
+exports.cmdSaveCheckpoint = cmdSaveCheckpoint;
+exports.cmdStartFromCheckpoint = cmdStartFromCheckpoint;

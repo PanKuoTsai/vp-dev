@@ -109,4 +109,6 @@ async function cmdGenerateDeviceTree(arg) {
   else if (pick === 'Show Notes') common.outputChannel().show(true);
 }
 
-Object.assign(exports, { deviceTreeFor, deviceTreePane, cmdGenerateDeviceTree });
+exports.deviceTreeFor = deviceTreeFor;
+exports.deviceTreePane = deviceTreePane;
+exports.cmdGenerateDeviceTree = cmdGenerateDeviceTree;

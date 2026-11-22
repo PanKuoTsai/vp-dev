@@ -61,4 +61,7 @@ async function cmdMenu() {
   if (c && c.command) vscode.commands.executeCommand(c.command);
 }
 
-Object.assign(exports, { ctxState, setCtx, ActionsTree, cmdMenu });
+exports.ctxState = ctxState;
+exports.setCtx = setCtx;
+exports.ActionsTree = ActionsTree;
+exports.cmdMenu = cmdMenu;

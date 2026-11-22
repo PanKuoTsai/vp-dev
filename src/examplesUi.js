@@ -48,4 +48,5 @@ async function cmdPerfCreateExample(context) {
   vscode.window.showInformationMessage('Performance example created. Run it with "VP Studio: Run Performance Experiment", or its sweep with "Run Performance Sweep".');
 }
 
-Object.assign(exports, { cmdCreateExample, cmdPerfCreateExample });
+exports.cmdCreateExample = cmdCreateExample;
+exports.cmdPerfCreateExample = cmdPerfCreateExample;

@@ -100,4 +100,6 @@ async function cmdReveal(uri, moduleName, portName) {
   ed.revealRange(range, vscode.TextEditorRevealType.InCenter);
 }
 
-Object.assign(exports, { MODULE_ROLE_LOOK, ModuleTree, cmdReveal });
+exports.MODULE_ROLE_LOOK = MODULE_ROLE_LOOK;
+exports.ModuleTree = ModuleTree;
+exports.cmdReveal = cmdReveal;

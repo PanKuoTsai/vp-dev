@@ -248,7 +248,12 @@ async function cmdConnectAgent() {
   await connectAgent({ host: m[1] || '127.0.0.1', port: Number(m[2]), auto: false });
 }
 
-Object.assign(exports, {
-  AGENT_INSTANCE, simAgentLibrary, setAgentContext, connectAgent, disconnectAgent, cmdPause, cmdContinue, runTimed,
-  cmdConnectAgent,
-});
+exports.AGENT_INSTANCE = AGENT_INSTANCE;
+exports.simAgentLibrary = simAgentLibrary;
+exports.setAgentContext = setAgentContext;
+exports.connectAgent = connectAgent;
+exports.disconnectAgent = disconnectAgent;
+exports.cmdPause = cmdPause;
+exports.cmdContinue = cmdContinue;
+exports.runTimed = runTimed;
+exports.cmdConnectAgent = cmdConnectAgent;
