@@ -181,7 +181,7 @@ test('set param: runtime names map to platform modules and replicas', () => {
   // A parameter of the top container: saved in platform.params (2026-11-15: set from the
   // Simulation Parameters view as "platform.gdb_port", where no Save in Platform was offered).
   assert.deepStrictEqual(params.runtimeTarget(doc, a, 'platform.gdb_port'), { platform: true, name: 'gdb_port' });
-  const pt = fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8');
+  const pt = fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8');
   const pe = params.setPlatformParamEdit(pt, 'gdb_port', 5555);
   const pd = JSON.parse(pt.slice(0, pe.start) + pe.text + pt.slice(pe.end));
   assert.strictEqual(pd.platform.params.gdb_port, 5555);
@@ -193,7 +193,7 @@ test('set param: runtime names map to platform modules and replicas', () => {
   assert.strictEqual(params.schemaValue(0xffffffffffffffffn), '0xffffffffffffffff');
   assert.strictEqual(params.schemaValue(true), true);
   // Saving it writes the replica's perIndex entry.
-  const text = fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8');
+  const text = fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8');
   const e = params.setParamEdit(text, 'cpu', 'gdb_port', 4321, '3');
   const out = text.slice(0, e.start) + e.text + text.slice(e.end);
   assert.strictEqual(JSON.parse(out).modules.cpu.perIndex['3'].params.gdb_port, 4321);

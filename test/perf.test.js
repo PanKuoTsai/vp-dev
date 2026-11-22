@@ -19,7 +19,7 @@ const PERF_STATS = {
 };
 
 test('perf: at_bus is a bus for the view, not for the agent and probes; only traffic_gen may bind to it', () => {
-  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'ddr-contention.platform.json'), 'utf8'));
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'ddr-contention.platform.json'), 'utf8'));
   const a = core.analyze(d);
   assert.deepStrictEqual(a.buses, ['bus']);
   assert.deepStrictEqual(a.routers, []);
@@ -34,27 +34,27 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
   bad.modules.load = { type: 'loader', ports: { initiator_socket: { bind: 'bus.target_socket' } } };
   assert.ok(core.analyze(bad).problems.some((p) => /takes approximately-timed initiators only/.test(p.message) && p.severity === 'warning'));
   // The two-channel example: two DRAM controllers, each 512 MiB, on the same bus; its sweep fits it.
-  const d2 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'ddr-2ch.platform.json'), 'utf8'));
+  const d2 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'ddr-2ch.platform.json'), 'utf8'));
   const a2 = core.analyze(d2, { catalog: JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8')) });
   assert.deepStrictEqual(a2.problems, []);
   assert.deepStrictEqual(a2.memoryMap.map((r) => [r.instance, Number(r.start), Number(r.size)]), [['ddr0', 0, 0x20000000], ['ddr1', 0x20000000, 0x20000000]]);
-  const sw2 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'ddr-2ch.perfsweep.json'), 'utf8'));
+  const sw2 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'ddr-2ch.perfsweep.json'), 'utf8'));
   assert.deepStrictEqual(require('../lib/analysis/perf').checkSweep(sw2, d2), []);
   // Each generator stays in its channel.
   const inCh = (g, base) => { const p = d2.modules[g].params; return Number(p.address) >= base && Number(p.address) + Number(p.size) <= base + 0x20000000; };
   assert.ok(inCh('display', 0) && inCh('dma', 0x20000000) && inCh('cpu', 0x20000000));
   // Two DDRs, each behind its own MAU with QoS; every example file is copied by Create Performance Example.
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
-  const d3 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'mau-2ddr.platform.json'), 'utf8'));
+  const d3 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'mau-2ddr.platform.json'), 'utf8'));
   const a3 = core.analyze(d3, { catalog: cat });
   assert.deepStrictEqual(a3.problems, []);
   assert.deepStrictEqual(a3.memoryMap.map((r) => [r.instance, Number(r.start), Number(r.size)]), [['ddr0', 0, 0x80000000], ['ddr1', 0x80000000, 0x60000000]]);
   assert.deepStrictEqual(a3.buses.map((b) => b.name || b).sort(), ['mau0', 'mau1']);
-  const sw3 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'mau-qos.perfsweep.json'), 'utf8'));
+  const sw3 = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'mau-qos.perfsweep.json'), 'utf8'));
   assert.deepStrictEqual(require('../lib/analysis/perf').checkSweep(sw3, d3), []);
   const ext = extensionSource();
   const listed = JSON.parse(/const PERF_EXAMPLES = (\[[^\]]*\]);/.exec(ext)[1].replace(/'/g, '"'));
-  assert.deepStrictEqual(listed.slice().sort(), fs.readdirSync(path.join(__dirname, '..', 'examples', 'perf')).filter((f) => f.endsWith('.json')).sort());
+  assert.deepStrictEqual(listed.slice().sort(), fs.readdirSync(path.join(__dirname, '..', 'templates', 'perf')).filter((f) => f.endsWith('.json')).sort());
   // The Ubuntu example: routers and buses are the same.
   const u = core.analyze(load());
   assert.deepStrictEqual(u.routers, u.buses);
@@ -68,7 +68,7 @@ test('perf: at_bus is a bus for the view, not for the agent and probes; only tra
   if (Ajv) {
     const ajv = new Ajv.draft2020({ allErrors: true, strict: false });
     assert.ok(ajv.validate(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'qbox-platform.schema.json'), 'utf8')), d), JSON.stringify(ajv.errors));
-    const sw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'cpu-outstanding.perfsweep.json'), 'utf8'));
+    const sw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'cpu-outstanding.perfsweep.json'), 'utf8'));
     const ajv7 = new Ajv.draft7({ allErrors: true, strict: false });
     assert.ok(ajv7.validate(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'schemas', 'vp-perfsweep.schema.json'), 'utf8')), sw), JSON.stringify(ajv7.errors));
   }
@@ -95,8 +95,8 @@ test('perf: statistics, metric paths, sweeps, checks and CSV', () => {
   assert.match(perf.runCsv(st), /^kind,name,.*\ninitiator,cpu,7,3,640,812\.5,95,90,180,200,,\n/);
 
   // Sweeps.
-  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'ddr-contention.platform.json'), 'utf8'));
-  const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'cpu-outstanding.perfsweep.json'), 'utf8'));
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'ddr-contention.platform.json'), 'utf8'));
+  const spec = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'cpu-outstanding.perfsweep.json'), 'utf8'));
   assert.deepStrictEqual(perf.checkSweep(spec, d), []);
   assert.strictEqual(perf.runCount(spec), 12);
   const runs = perf.expandSweep(spec);
@@ -215,11 +215,11 @@ test('perf: a system bus (crossbar) in front of two MAUs: relative_addresses, Qo
   const perf = require('../lib/analysis/perf');
   const dataflow = require('../lib/platform/dataflow');
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
-  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'mau-sysbus.platform.json'), 'utf8'));
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'mau-sysbus.platform.json'), 'utf8'));
   const a = core.analyze(d, { catalog: cat });
   assert.deepStrictEqual(a.problems, []);
   assert.deepStrictEqual(a.buses.slice().sort(), ['mau0', 'mau1', 'sysbus']);
-  const sw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'mau-sysbus.perfsweep.json'), 'utf8'));
+  const sw = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'mau-sysbus.perfsweep.json'), 'utf8'));
   assert.deepStrictEqual(perf.checkSweep(sw, d), []);
   // The MAUs decode the same absolute addresses: the system bus passes them on unchanged.
   const lua = core.generate(d);
@@ -290,7 +290,7 @@ fs.writeFileSync(out,JSON.stringify({format:'vp-perf-stats',version:1,complete:t
   const exe = path.join(dir, 'fake-sim');
   fs.writeFileSync(exe, `#!/bin/sh\nexec "$VP_TEST_NODE" "${js}" "$@"\n`, { mode: 0o755 });
   process.env.VP_TEST_NODE = process.execPath;
-  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'perf', 'ddr-contention.platform.json'), 'utf8'));
+  const d = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'perf', 'ddr-contention.platform.json'), 'utf8'));
   const platformFile = path.join(dir, 'p.platform.json');
   fs.writeFileSync(platformFile, JSON.stringify(d));
   const spec = { platform: 'p.platform.json', sweep: [{ param: 'cpu.max_outstanding', values: [1, 2, 3, 4] }], metrics: ['initiators.cpu.bandwidthMBps'], checks: [{ metric: 'initiators.cpu.bandwidthMBps', min: 150 }] };

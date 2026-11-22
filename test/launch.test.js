@@ -15,7 +15,7 @@ test('launch: the agent module gets one bus socket per router', () => {
     name: 'sim_agent', type: 'sim_agent', dylib: '/a/sim_agent', params: { port: 5000, buses: 2 },
     ports: { bus_0: { bind: 'router.target_socket' }, bus_1: { bind: 'periph.router_1.target_socket' } },
   });
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const lua = core.generate(doc, { extraModules: [launch.agentModule('/a/sim_agent', 5000, core.analyze(doc).buses)] });
   assert.ok(lua.includes('platform["sim_agent"] = { moduletype = "sim_agent"; dylib_path = "/a/sim_agent"; port = 5000; buses = 1; bus_0 = {bind = "&router.target_socket"} }'), lua.slice(-400));
 });
@@ -77,7 +77,7 @@ test('vp-run: JUnit report escapes console text and counts failures', () => {
 });
 
 test('launch: snapshot=on for writable disk images only', () => {
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   assert.deepStrictEqual(launch.snapshotOverrides(doc), [{
     instance: 'virtioblk_0', param: 'blkdev_str', value: 'file=${TOP}fw/Artifacts/image_ext4.img,format=raw,if=none,readonly=off,snapshot=on',
   }]);

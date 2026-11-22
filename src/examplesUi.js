@@ -12,14 +12,14 @@ async function cmdCreateExample(context) {
   const target = await vscode.window.showSaveDialog({ defaultUri: def, filters: { 'Platform description': ['json'] },
     title: 'Save next to the firmware folder the platform refers to' });
   if (!target) return;
-  const src = path.join(context.extensionPath, 'examples', 'ubuntu-aarch64' + common.SUFFIX);
+  const src = path.join(context.extensionPath, 'templates', 'ubuntu-aarch64' + common.SUFFIX);
   const data = JSON.parse(await fs.promises.readFile(src, 'utf8'));
   delete data.$schema; // the extension associates the schema by file name
   await fs.promises.writeFile(target.fsPath, JSON.stringify(data, null, 2) + '\n', 'utf8');
   vscode.window.showTextDocument(target);
 }
 
-/** The performance examples (examples/perf), copied together; the first is opened. */
+/** The performance examples (templates/perf), copied together; the first is opened. */
 const PERF_EXAMPLES = ['ddr-contention.platform.json', 'cpu-outstanding.perfsweep.json', 'ddr-2ch.platform.json', 'ddr-2ch.perfsweep.json',
   'mau-2ddr.platform.json', 'mau-qos.perfsweep.json', 'mau-sysbus.platform.json', 'mau-sysbus.perfsweep.json'];
 
@@ -32,7 +32,7 @@ async function cmdPerfCreateExample(context) {
   });
   if (!pick || !pick.length) return;
   const dir = pick[0].fsPath;
-  const src = path.join(context.extensionPath, 'examples', 'perf');
+  const src = path.join(context.extensionPath, 'templates', 'perf');
   const names = PERF_EXAMPLES;
   const there = names.filter((n) => fs.existsSync(path.join(dir, n)));
   if (there.length) {

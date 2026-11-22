@@ -33,7 +33,7 @@
   },
   "tested": [
     {
-      "platform": "examples/ubuntu-aarch64.platform.json",
+      "platform": "templates/ubuntu-aarch64.platform.json",
       "result": "boots to login:",
       "date": "2026-11-14"
     }

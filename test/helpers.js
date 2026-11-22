@@ -4,9 +4,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const load = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+const load = () => JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
 
-const examplePath = path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json');
+const examplePath = path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json');
 
 function workspace() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vps-'));
@@ -19,7 +19,7 @@ function workspace() {
 
 const catalog = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
 
-const exampleText = () => fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8');
+const exampleText = () => fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8');
 
 // The extension's own sources: extension.js and src/*.js, as [name, text].
 const extensionFiles = () => [path.join(__dirname, '..', 'extension.js'),

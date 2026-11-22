@@ -63,8 +63,8 @@ bin/vp-run --import-kit ubuntu-kit.tar.gz --into ~/kits     # 解開並比對 SH
 效能實驗（平台由 `traffic_gen`、`at_bus`、`dram_ctrl`、`perf_stats` 組成；QBox 要有 `perf.so`）：
 
 ```sh
-bin/vp-run --qbox ~/qbox --perf examples/perf/ddr-contention.platform.json      # 一次，統計寫到 perf-results/
-bin/vp-run --qbox ~/qbox --perf-sweep examples/perf/cpu-outstanding.perfsweep.json --junit perf.xml
+bin/vp-run --qbox ~/qbox --perf templates/perf/ddr-contention.platform.json      # 一次，統計寫到 perf-results/
+bin/vp-run --qbox ~/qbox --perf-sweep templates/perf/cpu-outstanding.perfsweep.json --junit perf.xml
 ```
 
 `--perf-sweep` 跑掃描檔中每一種參數組合，在 `--out DIR`（預設掃描檔旁的 `perf-results/<名稱>-<時間>/`）寫出 `results.json`、`results.csv` 與每次的 `run-<n>.json`，並在標準輸出印出各次的指標。掃描檔的 `checks`（`{"metric": …, "min": …, "max": …, "where": {…}}`）是 CI 門檻：任何一項不符或任何一次執行失敗，結束碼為 1；`--junit` 把每項檢查寫成一個 test case。`--jobs N` 同時執行的模擬數（預設 CPU 數的一半）；`--timeout` 是每次執行的上限。

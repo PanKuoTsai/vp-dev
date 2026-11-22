@@ -21,7 +21,7 @@ test('registers: the bundled descriptions load and cover the example platform', 
   assert.strictEqual(gic.filter((r) => r.name.startsWith('GICD_ISENABLER')).length, 32);
   assert.strictEqual(gic.find((r) => r.name === 'GICD_ISENABLER12').offset, 0x130n);
 
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const ps = registers.peripherals(doc, descs, core.analyze(doc).buses);
   assert.deepStrictEqual(ps.map((p) => `${p.id}@0x${p.address.toString(16)}/${p.bus}#${p.busIndex}`),
     ['pl011_uart_0.target_socket@0x10000000/router#0', 'gic_0.dist_iface@0x17a00000/router#0',

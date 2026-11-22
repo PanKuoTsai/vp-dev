@@ -95,7 +95,7 @@ test('trace view: Initiator column and clickable bus accesses', () => {
 
 test('signal tracing: which connections, and how the tracer is wired in', () => {
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   // QEMU-to-QEMU lines (GIC to CPUs, timers, virtio) are wired inside QEMU and left out.
   const pts = trace.signalPoints(doc, cat);
   assert.deepStrictEqual(pts.map((p) => `${p.id}>${p.dest}.${p.destPort}/${p.declaredBy}`), ['pl011_uart_0.irq>gic_0.spi_in_379/source']);
@@ -185,7 +185,7 @@ test('bus breakpoints: labels and hit descriptions', () => {
 
 test('probes: every place one fits, and which ones record from the start', () => {
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const list = trace.probeList(doc, cat);
   // The bus-mapped ports first (by address), then the signals.
   assert.deepStrictEqual(list.map((p) => p.id), trace.tracePoints(doc).map((p) => p.id).concat(['pl011_uart_0.irq']));

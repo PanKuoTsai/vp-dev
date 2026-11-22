@@ -81,7 +81,7 @@ async function perfPlatform(uri) {
   const loaded = await platformFiles.load(uri);
   if (!loaded) return undefined;
   if (!perf.isPerfPlatform(loaded.data)) {
-    vscode.window.showErrorMessage(`${path.basename(uri.fsPath)} has no performance models (traffic_gen, at_bus, dram_ctrl, perf_stats). See examples/perf in VP Studio, or "VP Studio: Create Performance Example".`);
+    vscode.window.showErrorMessage(`${path.basename(uri.fsPath)} has no performance models (traffic_gen, at_bus, dram_ctrl, perf_stats). See templates/perf in VP Studio, or "VP Studio: Create Performance Example".`);
     return undefined;
   }
   const errors = catalogUi.analyzeWithCatalog(loaded.data).problems.filter((p) => p.severity === 'error');

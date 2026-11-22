@@ -75,6 +75,7 @@ prebuilt/                    版本庫內唯一的編譯產物：win32/vp-askpas
 bin/vp-run                   命令列執行與 CI 的入口：找 Node.js（含 VS Code 內建的）執行 vp-run.js
 bin/vp-run.js                命令列執行與 CI：主控台 expect/send、逾時、JUnit 報告
 tools/vp-py/vpstudio.py      sim agent 的 Python 用戶端（只用標準函式庫）
+examples/                    參考用的範例，不會被指令複製
 examples/ci/                 CI 範例：Python 檢查、GitLab CI、Jenkinsfile
 tools/qbox-catalog/          元件目錄工具（C++）
 tools/sim-agent/             sim agent 模組（C++，QBox 的外部模組函式庫）
@@ -88,7 +89,9 @@ schemas/qbox-platform.schema.json   平台描述 schema（0.1；0.2 加入子系
 schemas/qbox-model.schema.json      模型描述 schema
 schemas/qbox-registers.schema.json  暫存器描述 schema（catalog/registers/、工作區的 *.registers.json）
 examples/ipxact/simple_timer.xml    IP-XACT 匯入範例
-examples/ubuntu-aarch64.platform.json
+templates/                   Create Example 指令複製到工作區的範本，測試也以它們為輸入
+  ubuntu-aarch64.platform.json      Ubuntu AArch64 參考平台（Create Example Platform）
+  perf/                             效能實驗的平台與掃描檔（Create Performance Example）
 test/run.js                  執行全部測試（npm test）；node test/run.js core view 只跑指定的檔
 test/<主題>.test.js          各主題的測試，可單獨執行：node test/core.test.js
 test/harness.js              test、testAsync（非同步測試排在所有同步測試之後）

@@ -9,7 +9,7 @@ const os = require('os');
 test('checkpoint: what a checkpoint of the Ubuntu platform holds', () => {
   const ck = require('../lib/sim/checkpoint');
   const reg = require('../lib/analysis/registers');
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const cat = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'qbox-catalog.json'), 'utf8'));
   const top = '/plat';
   const p = ck.plan(doc, { catalog: cat, descs: reg.loadDir(path.join(__dirname, '..', 'catalog', 'registers')).descs, buses: ['router'], topDir: top });
@@ -56,7 +56,7 @@ testAsync('checkpoint: save refuses a disk in a snapshot overlay, and runs the g
 
 test('checkpoint: manifest, listing and how to start from it', () => {
   const ck = require('../lib/sim/checkpoint');
-  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
   const text = JSON.stringify(doc);
   assert.strictEqual(ck.withDiskFile('file=${TOP}a.img,format=raw,if=none,readonly=off', '/c/run/d.img', false), 'file=/c/run/d.img,format=raw,if=none,readonly=off');
   assert.strictEqual(ck.withDiskFile('format=raw,file=/a.img,snapshot=off', '/c/d.img', true), 'format=raw,file=/c/d.img,snapshot=on');
