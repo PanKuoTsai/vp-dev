@@ -23,6 +23,12 @@ tools/**
 .vscode/**
 theia/**
 
-# internal planning notes
+# internal planning notes; the documents README.md links to are shipped
 docs/**
+!docs/cli.md
+!docs/debugging.md
+!docs/features.md
+!docs/settings.md
+!docs/structure.md
+!docs/verification.md
 **/__pycache__/**

@@ -2,7 +2,7 @@
 'use strict';
 // vp-run: start a VP Studio platform without the IDE, check its console output,
 // and report pass or fail with the exit code. For CI jobs and test scripts.
-// See README.md ("Command line and CI") and tools/vp-py for the Python client.
+// See docs/cli.md and tools/vp-py for the Python client.
 
 const fs = require('fs');
 const path = require('path');

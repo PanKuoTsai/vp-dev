@@ -24,6 +24,13 @@ sshd_pw_config
 .DS_Store
 theia/*/.browser_modules/
 
-# Internal development notes and plans (kept local)
+# Internal development notes and plans (kept local). In docs/, only the
+# documents README.md links to are part of the repository.
 CLAUDE.md
-docs/
+docs/*
+!docs/cli.md
+!docs/debugging.md
+!docs/features.md
+!docs/settings.md
+!docs/structure.md
+!docs/verification.md
