@@ -4,6 +4,12 @@ VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangel
 
 ## 未發布
 
+## 0.2.9（2026-11-23）
+
+### 修正
+
+- 客體 `poweroff`（或在模擬器終端機按 Ctrl-\\）讓模擬器結束後，狀態列仍顯示「VP running」、要按 Stop 才恢復。現在 VP Studio 偵測到模擬器結束（VS Code 的 shell integration 回報指令結束，或 sim agent 的連線被另一端關閉）就自動恢復狀態、中斷 agent、關閉 UART 主控台，並在狀態列說明；模擬器的終端機留著，可以看最後的輸出。
+
 ## 0.2.8（2026-11-23）
 
 ### 新增

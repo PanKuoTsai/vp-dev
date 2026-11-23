@@ -155,6 +155,9 @@ async function connectAgent({ host = '127.0.0.1', port, auto, handshake = false 
   client.on('notification', (method, params) => { if (method === 'sim.stateChanged') applyStatus(params); });
   client.on('close', () => {
     if (shared.agent !== client) return;
+    // Closed by the other end while a simulation from VP Studio runs: the agent lives in the
+    // simulator (or the SSH tunnel to it), so the simulator has ended.
+    const ended = !shared.agentClosing && auto && shared.simRunning;
     shared.agent = undefined;
     shared.agentStatus = undefined;
     clearInterval(shared.agentPoll);
@@ -163,6 +166,7 @@ async function connectAgent({ host = '127.0.0.1', port, auto, handshake = false 
     shared.paramTree.clear();
     traceUi.traceDisconnected();
     clearInterval(shared.profileTimer); shared.profileTimer = undefined; // the next connection starts it again
+    if (ended) require('./simUi').simulationEnded('its sim agent disconnected');
   });
   let busy = false;
   const poll = async () => {
@@ -178,8 +182,11 @@ async function connectAgent({ host = '127.0.0.1', port, auto, handshake = false 
 
 function disconnectAgent() {
   shared.agentAttempt++;
-  if (shared.agent) shared.agent.close(); // the close handler resets the state
-  else if (shared.agentItem) updateAgentItem();
+  shared.agentClosing = true;
+  try {
+    if (shared.agent) shared.agent.close(); // the close handler resets the state
+    else if (shared.agentItem) updateAgentItem();
+  } finally { shared.agentClosing = false; }
 }
 
 async function agentCall(method, params) {

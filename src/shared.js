@@ -10,6 +10,8 @@ module.exports = {
   routeSeq: 0,
   extContext: undefined,
   runningPlatform: undefined, // uri of the platform the current simulation was started from
+  simRunning: false, // a simulation started from VP Studio is running (setRunning)
+  agentClosing: false, // VP Studio itself is closing the agent connection (disconnectAgent)
   runningDoc: undefined, // its description as started
   runningBuses: [], // the routers the agent's bus_N sockets are bound to
   runningRemote: undefined, // {host, ...} while the running simulation is on a remote host (F-03)

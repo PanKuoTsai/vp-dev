@@ -408,7 +408,27 @@ function cmdStop() {
   setRunning(false);
 }
 
+/**
+ * The simulator ended by itself (the guest powered off, Ctrl-\\ in its terminal, a crash): what
+ * Stop does, except that its terminal stays open with the last output. why: shown in the status bar.
+ */
+function simulationEnded(why) {
+  if (!shared.simRunning) return;
+  agentUi.disconnectAgent();
+  setRunning(false);
+  vscode.window.setStatusBarMessage(`VP Studio: the simulation ended${why ? ` (${why})` : ''}`, 15000);
+}
+
+/** The simulator's terminal says a command ended (VS Code shell integration): the simulator, as it is the only one run there. */
+function onShellExecutionEnd(e) {
+  if (!e || e.terminal !== shared.terminal || !shared.simRunning) return;
+  const cmd = (e.execution && e.execution.commandLine && e.execution.commandLine.value) || '';
+  if (cmd && !/platforms-vp|\.lua\b/.test(cmd) && !cmd.includes(common.cfg().get('executable'))) return;
+  simulationEnded(typeof e.exitCode === 'number' ? `exit code ${e.exitCode}` : '');
+}
+
 function setRunning(running, detail) {
+  shared.simRunning = !!running;
   menuUi.setCtx('vpStudio.running', running);
   if (!running) consoleUi.closeAll();
   shared.statusItem.text = running ? `$(debug-stop) VP running${detail ? ' (' + detail + ')' : ''}` : '$(play) VP';
@@ -418,6 +438,8 @@ function setRunning(running, detail) {
 }
 
 exports.cmdGenerate = cmdGenerate;
+exports.simulationEnded = simulationEnded;
+exports.onShellExecutionEnd = onShellExecutionEnd;
 exports.addAgentOptions = addAgentOptions;
 exports.afterStart = afterStart;
 exports.start = start;

@@ -161,6 +161,7 @@ function activate(context) {
     }, 300);
   };
 
+  const anyWindow = /** @type {any} */ (vscode.window); // onDidEndTerminalShellExecution: VS Code 1.93+, newer than the type definitions
   context.subscriptions.push(
     shared.diagnostics, shared.statusItem, shared.agentItem, shared.menuItem,
     { dispose: agentUi.disconnectAgent },
@@ -173,6 +174,8 @@ function activate(context) {
     vscode.workspace.onDidChangeTextDocument((e) => changed(e.document)),
     vscode.workspace.onDidCloseTextDocument((d) => shared.diagnostics.delete(d.uri)),
     vscode.window.onDidChangeActiveTextEditor(() => tree.refresh()),
+    // The simulator ending by itself (guest poweroff): VS Code's shell integration says so (1.93+).
+    ...(typeof anyWindow.onDidEndTerminalShellExecution === 'function' ? [anyWindow.onDidEndTerminalShellExecution((e) => simUi.onShellExecutionEnd(e))] : []),
     vscode.window.onDidCloseTerminal((t) => { if (t === shared.terminal) { shared.terminal = undefined; agentUi.disconnectAgent(); simUi.setRunning(false); } }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('vpStudio.catalog')) vscode.workspace.textDocuments.forEach(platformFiles.refreshDiagnostics);
