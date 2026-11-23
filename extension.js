@@ -93,6 +93,7 @@ function activate(context) {
   reg('vpStudio.debugLayout', debugUi.cmdDebugLayout);
   reg('vpStudio.showExceptions', excUi.cmdShowExceptions);
   reg('vpStudio.showGic', gicUi.cmdShowGic);
+  reg('vpStudio.memoryLayout', () => memoryUi.cmdMemoryLayout().catch((e) => vscode.window.showErrorMessage(`Memory Layout: ${e.message}`)));
   reg('vpStudio.translateAddress', mmuUi.cmdTranslate);
   reg('vpStudio.findMemory', () => gdbUi.cmdFindMemory().catch((e) => vscode.window.showErrorMessage(`Find in Memory: ${e.message}`)));
   reg('vpStudio.viewAsType', () => gdbUi.cmdViewAsType().catch((e) => vscode.window.showErrorMessage(`View Address as Type: ${e.message}`)));

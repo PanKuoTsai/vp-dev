@@ -482,3 +482,19 @@ test('gdb targets: one gdb server per QEMU instance, ports, kept platform ports'
   assert.deepStrictEqual(two.map((t, k) => gt.configName(t, k)), ['VP: attach to target software', 'VP: attach to target software (qm)']);
   assert.strictEqual(gt.targets(doc, { preferCpu: 'cpu_1' })[0].cpu, 'cpu_1');
 });
+
+test('memory layout: Memory Inspector groupings for words per row, and VP Studio\'s defaults', () => {
+  const mv = require('../lib/debug/memview');
+  assert.deepStrictEqual(mv.layoutSettings(4, 4), { 'groupings.bytesPerMAU': 1, 'groupings.MAUsPerGroup': 4, 'groupings.groupsPerRow': 4 });
+  assert.deepStrictEqual(mv.layoutSettings(8, 'Autofit')['groupings.groupsPerRow'], 'Autofit');
+  assert.throws(() => mv.layoutSettings(3, 4), /word size/);
+  assert.throws(() => mv.layoutSettings(4, 5), /words per row/);
+  assert.strictEqual(mv.describeLayout(1, 1, 4).text, '4 bytes per row (4 bytes)');
+  assert.strictEqual(mv.describeLayout(1, 4, 4).text, '4 32-bit words per row (16 bytes)');
+  assert.strictEqual(mv.describeLayout(1, 8, 'Autofit').text, '64-bit words, as many as fit in a row');
+  // package.json makes 4 words of 4 bytes Memory Inspector's default.
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
+  const d = pkg.contributes.configurationDefaults;
+  assert.strictEqual(d[`${mv.SECTION}.${mv.KEYS.group}`], mv.DEFAULT_LAYOUT.wordBytes);
+  assert.strictEqual(d[`${mv.SECTION}.${mv.KEYS.row}`], mv.DEFAULT_LAYOUT.wordsPerRow);
+});

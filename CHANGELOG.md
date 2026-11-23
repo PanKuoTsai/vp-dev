@@ -4,6 +4,16 @@ VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangel
 
 ## 未發布
 
+## 0.2.6（2026-11-23）
+
+### 新增
+
+- **Memory Layout…**：選記憶體分頁每列顯示幾個 word、word 多大（1 到 16 bytes）。
+
+### 變更
+
+- Memory Inspector 的預設改為每列 4 個 32 位元 word（16 bytes），不再是每列 4 bytes。
+
 ## 0.2.5（2026-11-23）
 
 ### 新增

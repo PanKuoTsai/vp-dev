@@ -54,7 +54,7 @@ QEMU 把每顆 CPU 回報成一個 thread（`CPU#0 [halted]` 到 `CPU#7`）。
 
 在記憶體分頁中：表格上下的「Load … more bytes」可往前、往後多讀；右上角的齒輪可改每列幾組、每組幾個位元組與位元組順序；在表格上按右鍵可打開 ASCII 欄、把記憶體存成檔案（Store Memory to File…）或設資料中斷點（Break on Value Change 等；經 QEMU gdbstub 的 watchpoint，尚未實測）。資料格可直接修改。每次暫停會重新讀取（設定 `memory-inspector.refreshOnStop`），可以開多個 Memory 分頁。
 
-看 64 位元的值時，可在設定把 `memory-inspector.groupings.MAUsPerGroup` 設為 8。
+**每列的格式**：Memory Inspector 自己的預設是每組 1 byte、每列 4 組，一列只有 4 bytes。VP Studio 把預設改成每組 4 bytes、每列 4 組，也就是每列 4 個 32 位元 word（16 bytes），word 以 little-endian 組成數值，例如核心指標 `0xffff800008223dd0` 顯示為 `08223dd0 ffff8000`。要換格式，用 **VP Studio: Memory Layout…**（Debug 組），選 word 大小（1、2、4、8、16 bytes）與每列幾個 word（1 到 32，或依分頁寬度自動排滿）。例如選 64-bit words 時，指標整個顯示成 `ffff800008223dd0`。設定寫在使用者設定的 `memory-inspector.groupings.bytesPerMAU`、`MAUsPerGroup`、`groupsPerRow`，之後開的記憶體分頁都採用；已經開著的分頁維持原格式，要改的話用該分頁右上角的齒輪。自己在設定中寫過這些值的話，以你的值為準（VP Studio 只改預設值）。
 
 注意：
 
@@ -152,6 +152,15 @@ Debug 組的第三段，都經由附加中的除錯器（除了實體位址的�
 - 支援 4 KB、16 KB、64 KB granule 與 48 位元位址；不支援 52 位元（FEAT_LPA2，會提示）。只做第一階段（EL1&0）；有 hypervisor 的第二階段（HCR_EL2.VM）時只提示。
 
 實測（Ubuntu 平台）：`$pc`（核心程式碼，L3 的 4 KiB page，EL1 r-x、EL0 ---，Normal write-back，contiguous）與 `$sp`（核心堆疊，EL1 rw-，DBM 已寫入）的實體位址，與 QEMU monitor 的 `gva2gpa` 相同；`0xffff000000000000` 是 level 0 的 translation fault，`gva2gpa` 也回報 Unmapped。
+
+## Pretty-printer
+
+CDT 附加時會送 `-enable-pretty-printing`，所以 gdb 的 Python pretty-printer 在「變數」「監看」裡會生效（2026-11-23 實測，Ubuntu 平台，以 `source` 載入測試用的 printer）：
+
+- 只有 `to_string` 的 printer：值直接顯示摘要，例如 `__cpu_online_mask = {0-7}`。
+- 有 `children` 的 printer：gdb 回報 `dynamic=1`、`numchild=0`、`has_more=1`，CDT 仍可展開。例如 `init_task.tasks = list_head with 64 entries` 展開成 `[0]`、`[1]`…，`*(struct task_struct *)$SP_EL0 = pid 0 swapper/7` 展開後仍是原本的欄位。
+- 注意：每次停下，畫面上每個用到 printer 的值都會重算，每次讀取都經過 gdbstub。`to_string` 若要走訪串列，展開一個含很多 `list_head` 的結構時會明顯變慢。
+- 自己的 printer 以 gdb 的 `source` 載入，例如在 launch.json 的 `initCommands` 加上 `source /path/printers.py`，或在 gdb 終端機輸入。
 
 ## Watchpoint 與執行到游標
 

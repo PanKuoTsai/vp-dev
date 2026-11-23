@@ -2,7 +2,7 @@
   "name": "vp-studio",
   "displayName": "VP Studio",
   "description": "Configure, inspect, run and debug QBox-based virtual platforms from a JSON platform description.",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "publisher": "novatek",
   "repository": {
     "type": "git",
@@ -75,6 +75,7 @@
       { "command": "vpStudio.thirdPartyDebuggers", "title": "Third-Party Debugger Setup…", "category": "VP Studio", "icon": "$(link-external)" },
       { "command": "vpStudio.showCpuRegisters", "title": "Show CPU Registers", "category": "VP Studio", "icon": "$(symbol-variable)" },
       { "command": "vpStudio.showMemory", "title": "Show Memory…", "category": "VP Studio", "icon": "$(file-binary)" },
+      { "command": "vpStudio.memoryLayout", "title": "Memory Layout…", "category": "VP Studio", "icon": "$(table)" },
       { "command": "vpStudio.translateAddress", "title": "Translate Virtual Address…", "category": "VP Studio", "icon": "$(symbol-reference)" },
       { "command": "vpStudio.showDisassembly", "title": "Show Disassembly", "category": "VP Studio", "icon": "$(list-flat)" },
       { "command": "vpStudio.debugLayout", "title": "Debug Layout", "category": "VP Studio", "icon": "$(layout)" },
@@ -109,6 +110,10 @@
       { "id": "vpStudio.menu.models", "label": "Models" },
       { "id": "vpStudio.menu.setup", "label": "Setup" }
     ],
+    "configurationDefaults": {
+      "memory-inspector.groupings.MAUsPerGroup": 4,
+      "memory-inspector.groupings.groupsPerRow": 4
+    },
     "menus": {
       "vpStudio.menu": [
         { "submenu": "vpStudio.menu.simulation", "group": "1_groups@1" },
@@ -155,11 +160,12 @@
         { "command": "vpStudio.showCpuRegisters", "group": "2_section@2" },
         { "command": "vpStudio.showDisassembly", "group": "2_section@3" },
         { "command": "vpStudio.showMemory", "group": "2_section@4" },
-        { "command": "vpStudio.translateAddress", "group": "2_section@5" },
-        { "command": "vpStudio.addConditionalBreakpoint", "group": "2_section@6" },
-        { "command": "vpStudio.showExceptions", "group": "2_section@7" },
-        { "command": "vpStudio.showGic", "group": "2_section@8" },
-        { "command": "vpStudio.mapSources", "when": "vpStudio.guestDebug", "group": "2_section@9" },
+        { "command": "vpStudio.memoryLayout", "group": "2_section@5" },
+        { "command": "vpStudio.translateAddress", "group": "2_section@6" },
+        { "command": "vpStudio.addConditionalBreakpoint", "group": "2_section@7" },
+        { "command": "vpStudio.showExceptions", "group": "2_section@8" },
+        { "command": "vpStudio.showGic", "group": "2_section@9" },
+        { "command": "vpStudio.mapSources", "when": "vpStudio.guestDebug", "group": "2_section@10" },
         { "command": "vpStudio.findMemory", "group": "3_section@1" },
         { "command": "vpStudio.viewAsType", "group": "3_section@2" },
         { "command": "vpStudio.loadSymbols", "group": "3_section@3" },

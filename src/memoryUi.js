@@ -117,6 +117,28 @@ async function showMemory(expression) {
   return true;
 }
 
+/**
+ * Memory Layout…: how Memory Inspector groups bytes into words and how many words go on a row.
+ * Written to the user settings (memory-inspector.groupings.*); a Memory tab opened before keeps its
+ * own layout (its gear button changes that tab alone).
+ */
+async function cmdMemoryLayout() {
+  const cfg = vscode.workspace.getConfiguration(memview.SECTION);
+  const now = memview.describeLayout(cfg.get(memview.KEYS.mau), cfg.get(memview.KEYS.group), cfg.get(memview.KEYS.row));
+  const size = await vscode.window.showQuickPick(memview.WORD_SIZES.map((n) => ({
+    label: n === 1 ? 'Bytes' : `${n * 8}-bit words`, description: `${n} byte${n === 1 ? '' : 's'}${n === now.wordBytes ? ' · current' : ''}`, n,
+  })), { title: `Memory Layout (1/2): word size · now ${now.text}` });
+  if (!size) return;
+  const row = await vscode.window.showQuickPick(memview.ROW_CHOICES.map((r) => ({
+    label: r === 'Autofit' ? 'As many as fit' : `${r} per row`,
+    description: (r === 'Autofit' ? 'follows the width of the tab' : `${Number(r) * size.n} bytes a row`) + (r === now.wordsPerRow && size.n === now.wordBytes ? ' · current' : ''), r,
+  })), { title: `Memory Layout (2/2): ${size.label.toLowerCase()} per row` });
+  if (!row) return;
+  for (const [k, v] of Object.entries(memview.layoutSettings(size.n, row.r))) await cfg.update(k, v, vscode.ConfigurationTarget.Global);
+  const d = memview.describeLayout(1, size.n, row.r);
+  vscode.window.showInformationMessage(`Memory Inspector: ${d.text}. Memory tabs opened from now on use it; a tab already open keeps its layout (change it with the gear in that tab).`);
+}
+
 /** A debug session started: remember whether Memory Inspector saw it, and offer it once when missing (until "Don't Ask Again"). */
 async function sessionStarted(session) {
   if (!session || !memview.DEBUG_TYPES.includes(session.type) || installed()) return;
@@ -140,4 +162,4 @@ async function sessionStarted(session) {
 
 function sessionEnded(session) { if (session) before.delete(session.id); }
 
-module.exports = { showMemory, sessionStarted, sessionEnded, ensureInspector };
+module.exports = { showMemory, sessionStarted, sessionEnded, ensureInspector, cmdMemoryLayout };
