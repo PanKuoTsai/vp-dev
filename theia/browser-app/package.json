@@ -1,7 +1,7 @@
 {
   "private": true,
   "name": "vp-studio-browser",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "theia": {
     "target": "browser",
     "frontend": {
@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@theia/core": "1.74.3",
-    "vp-studio-menu": "0.2.6",
+    "vp-studio-menu": "0.2.7",
     "@theia/editor": "1.74.3",
     "@theia/filesystem": "1.74.3",
     "@theia/markers": "1.74.3",

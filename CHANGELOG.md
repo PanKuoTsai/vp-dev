@@ -4,6 +4,12 @@ VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangel
 
 ## 未發布
 
+## 0.2.7（2026-11-23）
+
+### 新增
+
+- **Linux pretty-printer**：「變數」「監看」中 `cpumask` 顯示為 `{0-7}`、`atomic_t` 與 `refcount_t` 顯示數值、`kuid_t`／`kgid_t` 顯示編號、`qstr` 顯示名稱（設定 `vpStudio.debug.prettyPrinters`，預設開）。
+
 ## 0.2.6（2026-11-23）
 
 ### 新增

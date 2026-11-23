@@ -195,7 +195,7 @@ const linuxConfigProvider = {
     // Kernel sources built elsewhere (Map Kernel Sources…), then the Linux script.
     const mapped = guestlinux.withSourceMap(config, common.cfg().get('debug.sourceMap'));
     if (common.cfg().get('debug.linuxAwareness') === false) return mapped;
-    return guestlinux.withLinuxAwareness(mapped, linuxScript());
+    return guestlinux.withLinuxAwareness(mapped, linuxScript(), { printers: common.cfg().get('debug.prettyPrinters') !== false });
   },
 };
 

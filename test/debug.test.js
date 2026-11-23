@@ -150,6 +150,9 @@ test('guest linux: loading the gdb script', () => {
   assert.deepStrictEqual(c.initCommands, ['add-symbol-file "/x/app"', 'python import runpy; runpy.run_path("/ext/tools/gdb/vp-linux.py")', 'vp-kaslr -q']);
   assert.strictEqual(gl.withLinuxAwareness(c, '/ext/tools/gdb/vp-linux.py'), c);
   assert.deepStrictEqual(gl.withLinuxAwareness({ type: 'gdbtarget' }, '/s/vp-linux.py').initCommands.length, 2);
+  // Pretty-printers off: gdb's own disable command after loading the script.
+  assert.deepStrictEqual(gl.withLinuxAwareness({ type: 'gdbtarget' }, '/s/vp-linux.py', { printers: false }).initCommands.slice(-1), [gl.PRINTERS_OFF]);
+  assert.ok(/"vp-linux"/.test(fs.readFileSync(path.join(__dirname, '..', 'tools', 'gdb', 'vp-linux.py'), 'utf8')));
   // The script and the module agree on the version; the script ships in the .vsix.
   const py = fs.readFileSync(path.join(__dirname, '..', 'tools', 'gdb', 'vp-linux.py'), 'utf8');
   assert.strictEqual(/^VERSION = "(.*)"$/m.exec(py)[1], gl.SCRIPT_VERSION);

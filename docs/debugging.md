@@ -155,12 +155,25 @@ Debug 組的第三段，都經由附加中的除錯器（除了實體位址的�
 
 ## Pretty-printer
 
-CDT 附加時會送 `-enable-pretty-printing`，所以 gdb 的 Python pretty-printer 在「變數」「監看」裡會生效（2026-11-23 實測，Ubuntu 平台，以 `source` 載入測試用的 printer）：
+附加時，VP Studio 的 Linux 腳本（vp-linux.py）載入一組 gdb pretty-printer，讓「變數」「監看」中幾種核心的值直接顯示成一行：
 
-- 只有 `to_string` 的 printer：值直接顯示摘要，例如 `__cpu_online_mask = {0-7}`。
-- 有 `children` 的 printer：gdb 回報 `dynamic=1`、`numchild=0`、`has_more=1`，CDT 仍可展開。例如 `init_task.tasks = list_head with 64 entries` 展開成 `[0]`、`[1]`…，`*(struct task_struct *)$SP_EL0 = pid 0 swapper/7` 展開後仍是原本的欄位。
-- 注意：每次停下，畫面上每個用到 printer 的值都會重算，每次讀取都經過 gdbstub。`to_string` 若要走訪串列，展開一個含很多 `list_head` 的結構時會明顯變慢。
-- 自己的 printer 以 gdb 的 `source` 載入，例如在 launch.json 的 `initCommands` 加上 `source /path/printers.py`，或在 gdb 終端機輸入。
+| 型別 | 顯示 |
+|---|---|
+| `struct cpumask`（`cpus_mask`、`__cpu_online_mask` 等） | `{0-7}` |
+| `atomic_t`、`atomic64_t`、`atomic_long_t` | 數值 |
+| `refcount_t` | `refs 2` |
+| `kuid_t`、`kgid_t` | 使用者或群組編號 |
+| `struct qstr`（`d_name` 等） | `"kmsg"` |
+
+設定 `vpStudio.debug.prettyPrinters`（預設開）在下次附加時生效；gdb 終端機的 `info pretty-printer` 列出它們（集合名稱 `vp-linux`）。
+
+**沒有替 `task_struct`、`dentry`、`file`、`list_head` 這類結構做摘要**，原因是實測（2026-11-23，cdt-gdb-vscode 3.0.0、gdb 15）：
+- CDT 附加時會送 `-enable-pretty-printing`。有 printer 的值在 MI 中是 `dynamic=1`、`numchild=0`，CDT 只看 `numchild`，所以這種值**沒有展開箭頭**。替結構加摘要，就打不開它的欄位。（若監看項目在 printer 載入前就已建立，碰巧還能展開，這不可靠。）
+- 在「監看」已有該型別的值時才開啟這類 printer，gdb 的 `-var-update` 報「Duplicate variable object name」，在 VS Code 中 gdb 甚至以 internal error 結束。所以不要在除錯中途開關 pretty-printer；要改設定，請在下次附加前改。
+- 自己的 printer 也適用同樣的限制：只用 `to_string`、用在不需要展開的型別，並在附加時載入，例如在 launch.json 的 `initCommands` 加上 `source /path/printers.py`。
+- 每次停下，畫面上每個用到 printer 的值都會重算，每次讀取都經過 gdbstub，所以 printer 只讀少數欄位、不走訪串列。
+
+實測：監看 `*(struct task_struct *)$SP_EL0` 照常是 `{...}`、可展開，展開後的 `usage = refs 1`；`__cpu_online_mask = {0-7}`；在 gdb 中 pid 1 的 `fd[0]` 的 `f_path.dentry->d_name` 為 `"null"`。
 
 ## Watchpoint 與執行到游標
 

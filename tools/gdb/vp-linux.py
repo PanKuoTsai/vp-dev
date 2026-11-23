@@ -11,12 +11,22 @@
 #   vp-ps [-t]         processes (-t: also threads), and what each CPU runs
 #   vp-dmesg [-n N]    the kernel log (printk ring buffer, Linux 5.10 and later)
 #   vp-lsmod           loaded kernel modules with their section addresses
+# Pretty-printers (gdb's "vp-linux" collection; "info pretty-printer" lists them,
+# "disable pretty-printer global vp-linux" turns them off): one-line values for
+# cpumask ({0-7}), atomic_t, refcount_t, kuid_t/kgid_t and qstr. They read a few
+# fields and never walk a list, since every read goes to the target.
+# There are none for structs such as task_struct: under MI a printer makes the
+# variable numchild 0, and the CDT adapter then shows it without an expand arrow
+# (the fields could not be opened); and switching such a printer on while
+# Variables or Watch hold that type made gdb 15 fail ("Duplicate variable object
+# name") and, in VS Code, stop with an internal error (2026-11-23).
 # MI commands for tools (VP Studio's Guest Processes view): -vp-ps, -vp-dmesg,
 # -vp-kaslr, -vp-lsmod. They return the same data as MI results.
 
 import gdb
+import gdb.printing
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 MASK64 = (1 << 64) - 1
 
 
@@ -227,7 +237,9 @@ _STATES = [(0x01, "S"), (0x02, "D"), (0x04, "T"), (0x08, "t"), (0x40, "X"), (0x8
 
 
 def _state(task):
-    t = task.type.target()
+    t = task.type.strip_typedefs()
+    if t.code == gdb.TYPE_CODE_PTR:
+        t = t.target()
     exit_state = int(task["exit_state"])
     if exit_state & 0x20:
         return "Z"
@@ -391,6 +403,117 @@ def _modules():
         except gdb.error:
             release = ""
     return {"release": release, "modules": rows}
+
+
+# ---------------------------------------------------------------- pretty-printers
+
+def _qstr_name(q):
+    """The name of a struct qstr: len bytes at name (len sits in an anonymous union)."""
+    try:
+        n = int(q["len"])
+    except gdb.error:
+        n = 255
+    try:
+        return q["name"].string(length=min(max(n, 0), 255), errors="replace").split("\0", 1)[0]
+    except (gdb.error, gdb.MemoryError):
+        return "?"
+
+
+class _Printer:
+    """Base: to_string() from summary(), with read errors shown instead of raised."""
+
+    def __init__(self, val):
+        self.val = val
+
+    def to_string(self):
+        try:
+            return self.summary()
+        except (gdb.error, gdb.MemoryError, RuntimeError, ValueError) as e:
+            return "<unreadable: %s>" % str(e).split("\n")[0][:80]
+
+
+class _CpumaskPrinter(_Printer):
+    def summary(self):
+        bits = self.val["bits"]
+        words = bits.type.strip_typedefs().range()[1] + 1
+        size = bits.type.strip_typedefs().target().sizeof * 8
+        cpus = [w * size + b for w in range(words) for b in range(size) if int(bits[w]) >> b & 1]
+        out, i = [], 0
+        while i < len(cpus):
+            j = i
+            while j + 1 < len(cpus) and cpus[j + 1] == cpus[j] + 1:
+                j += 1
+            out.append(str(cpus[i]) if i == j else "%d-%d" % (cpus[i], cpus[j]))
+            i = j + 1
+        return "{" + ",".join(out) + "}"
+
+
+class _CounterPrinter(_Printer):
+    """atomic_t, atomic64_t, atomic_long_t: the value."""
+
+    def summary(self):
+        return str(int(self.val["counter"]))
+
+
+class _RefcountPrinter(_Printer):
+    def summary(self):
+        return "refs %d" % int(self.val["refs"]["counter"])
+
+
+class _IdPrinter(_Printer):
+    """kuid_t, kgid_t: the number."""
+
+    def summary(self):
+        return str(int(self.val["val"]))
+
+
+class _QstrPrinter(_Printer):
+    def summary(self):
+        return '"%s"' % _qstr_name(self.val)
+
+
+class _Subprinter(gdb.printing.SubPrettyPrinter):
+    def __init__(self, name, types, cls):
+        super().__init__(name)
+        self.types = types
+        self.cls = cls
+
+
+class VpLinuxPrinters(gdb.printing.PrettyPrinter):
+    """gdb's "vp-linux" collection. Types are matched by their name before and
+    after typedefs (atomic_t is a typedef of an anonymous struct)."""
+
+    def __init__(self):
+        subs = [
+            _Subprinter("cpumask", ["cpumask", "cpumask_t"], _CpumaskPrinter),
+            _Subprinter("atomic", ["atomic_t", "atomic64_t", "atomic_long_t"], _CounterPrinter),
+            _Subprinter("refcount", ["refcount_t", "refcount_struct"], _RefcountPrinter),
+            _Subprinter("kuid_kgid", ["kuid_t", "kgid_t", "kprojid_t"], _IdPrinter),
+            _Subprinter("qstr", ["qstr"], _QstrPrinter),
+        ]
+        super().__init__("vp-linux", subs)
+        self.by_name = {t: sp for sp in subs for t in sp.types}
+
+    def __call__(self, val):
+        if not self.enabled:
+            return None
+        t = val.type
+        names = []
+        try:
+            names.append(t.unqualified().name)
+            s = t.strip_typedefs()
+            if s.code in (gdb.TYPE_CODE_STRUCT, gdb.TYPE_CODE_UNION):
+                names.append(s.unqualified().tag)
+        except gdb.error:
+            return None
+        for n in names:
+            sp = self.by_name.get(n) if n else None
+            if sp is not None and sp.enabled:
+                return sp.cls(val)
+        return None
+
+
+gdb.printing.register_pretty_printer(None, VpLinuxPrinters(), replace=True)
 
 
 # ---------------------------------------------------------------- dmesg
