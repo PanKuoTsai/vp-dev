@@ -90,8 +90,6 @@ src/platformEdit.js TS2339 Property 'port' does not exist on type 'string'.
 src/platformEdit.js TS2769 No overload matches this call.
 src/profileUi.js TS2365 Operator '+' cannot be applied to types 'bigint' and 'number'.
 src/registersUi.js TS2554 Expected 1 arguments, but got 0.
-src/registersUi.js TS2554 Expected 1 arguments, but got 0.
-src/registersUi.js TS2554 Expected 1 arguments, but got 0.
 src/remoteUi.js TS2339 Property 'globalValue' does not exist on type '{}'.
 src/remoteUi.js TS2339 Property 'globalValue' does not exist on type '{}'.
 src/remoteUi.js TS2339 Property 'workspaceFolderValue' does not exist on type '{}'.
@@ -104,7 +102,7 @@ src/remoteUi.js TS2739 Type '{ agentLib: string; agentVersion: any; agentPort: a
 src/remoteUi.js TS2741 Property 'restore' is missing in type '{ uri: any; platform: { textDoc: vscode.TextDocument; data: any; }; options: { overrides: { instance: any; param: any; value: any; }[]; variableValues: { [k: string]: any; }; }; debug: any; port: any; ... 8 more ...; remoteInfo: { ...; }; }' but required in type '{ agentPort: any; debug: any; hostPortValues: any; movedPorts: any; options: any; opts: any; platform: any; port: any; probeIds: any; recording: any; remoteInfo: any; restore: any; traceIds: any; uri: any; where: any; }'.
 src/simUi.js TS2345 Argument of type '(what: any) => void' is not assignable to parameter of type '() => void'.
 src/simUi.js TS2353 Object literal may only specify known properties, and 'platformText' does not exist in type '{ paused?: boolean; snapshot?: boolean; }'.
-src/simUi.js TS2739 Type '{ uri: vscode.Uri; platform: { textDoc: vscode.TextDocument; data: any; }; options: { overrides: { instance: any; param: any; value: any; }[]; } | { overrides?: undefined; }; debug: any; ... 8 more ...; movedPorts: any[]; }' is missing the following properties from type '{ agentPort: any; debug: any; hostPortValues: any; movedPorts: any; options: any; opts: any; platform: any; port: any; probeIds: any; recording: any; remoteInfo: any; restore: any; traceIds: any; uri: any; where: any; }': remoteInfo, where
+src/simUi.js TS2739 Type '{ uri: vscode.Uri; platform: { textDoc: vscode.TextDocument; data: any; }; options: { overrides: any; variableValues: {}; }; debug: any; port: any; traceIds: any[]; probeIds: any; recording: any; ... 4 more ...; movedPorts: any[]; }' is missing the following properties from type '{ agentPort: any; debug: any; hostPortValues: any; movedPorts: any; options: any; opts: any; platform: any; port: any; probeIds: any; recording: any; remoteInfo: any; restore: any; traceIds: any; uri: any; where: any; }': remoteInfo, where
 src/traceUi.js TS2339 Property 'error' does not exist on type '{ added?: boolean; }'.
 src/traceUi.js TS2353 Object literal may only specify known properties, and 'error' does not exist in type '{ added?: boolean; }'.
 src/traceUi.js TS2353 Object literal may only specify known properties, and 'kind' does not exist in type '{ label: any; description: string; detail: string; picked: any; id: any; }'.

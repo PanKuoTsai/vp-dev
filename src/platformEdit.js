@@ -10,6 +10,7 @@ const modules = require('../lib/platform/modules');
 const connect = require('../lib/platform/connect');
 const restructure = require('../lib/platform/restructure');
 const shared = require('./shared');
+const crossUi = require('./crossUi');
 const common = require('./common');
 const catalogUi = require('./catalogUi');
 const platformFiles = require('./platformFiles');
@@ -396,13 +397,19 @@ async function handleFormMessage(uri, msg, reply) {
       const commands = { generate: 'vpStudio.generate', start: 'vpStudio.start', startTrace: 'vpStudio.startTrace', trace: 'vpStudio.showTrace', probes: 'vpStudio.chooseProbes' };
       return commands[msg.command] ? vscode.commands.executeCommand(commands[msg.command], uri) : undefined;
     }
+    case 'txRegister':
+      // A bus access pinned in the Transactions tab: its register in Peripheral Registers.
+      return crossUi.revealRegister(String(msg.address || '')).catch(() => {});
     case 'txWatch': {
       // The Transactions tab opened (or closed): records of the running platform go to it.
       const key = uri.toString();
       if (!msg.on) { traceUi.txWatch.delete(key); return undefined; }
       traceUi.txWatch.add(key);
       reply(traceUi.txState(key));
-      if (shared.runningPlatform && shared.runningPlatform.toString() === key) reply({ type: 'tx', records: shared.traceRecords.slice(-5000), reset: true });
+      if (shared.runningPlatform && shared.runningPlatform.toString() === key) {
+        reply({ type: 'tx', records: shared.traceRecords.slice(-5000), reset: true });
+        reply(Object.assign({ type: 'stopMark' }, crossUi.currentMark()));
+      }
       traceUi.traceConnected();
       return undefined;
     }

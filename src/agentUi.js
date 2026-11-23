@@ -9,6 +9,9 @@ const shared = require('./shared');
 const common = require('./common');
 const catalogUi = require('./catalogUi');
 const traceUi = require('./traceUi');
+const excUi = require('./excUi');
+const gicUi = require('./gicUi');
+const crossUi = require('./crossUi');
 const profileUi = require('./profileUi');
 const menuUi = require('./menuUi');
 
@@ -67,7 +70,7 @@ function updateAgentItem(phase) {
   const s = shared.agentStatus || {};
   const t = simagent.formatTime(s.time && s.time.seconds);
   if (s.state === 'paused') {
-    shared.agentItem.text = `$(debug-continue) Paused at ${t}${s.breakpointHit ? ` · breakpoint #${s.breakpointHit.breakpoint}` : ''}`;
+    shared.agentItem.text = `$(debug-continue) Paused at ${t}${s.breakpointHit ? ` · breakpoint #${s.breakpointHit.breakpoint}` : ''}${s.exceptionHit ? ` · exception on CPU ${s.exceptionHit[2]}` : ''}`;
     const tip = new vscode.MarkdownString('Simulation paused. Click to continue.\n\n'
       + '[Continue](command:vpStudio.continue) · [Run For…](command:vpStudio.runFor) · [Run Until…](command:vpStudio.runUntil)');
     tip.isTrusted = { enabledCommands: ['vpStudio.continue', 'vpStudio.runFor', 'vpStudio.runUntil'] };
@@ -93,10 +96,13 @@ function updateAgentItem(phase) {
 function applyStatus(status) {
   if (!status || typeof status !== 'object') return;
   const wasPaused = shared.agentStatus && shared.agentStatus.state === 'paused';
+  const previous = shared.agentStatus;
   shared.agentStatus = status;
   setAgentContext();
   updateAgentItem();
   traceUi.showHit(status);
+  excUi.showHit(status);
+  gicUi.onStatus(status, previous);
   if (status.restore && status.restore.state === 'failed' && !shared.restoreReported) {
     shared.restoreReported = true;
     vscode.window.showErrorMessage(`The checkpoint could not be loaded, so the simulation stays paused: ${status.restore.error}`, 'Check QBox Version')
@@ -108,7 +114,7 @@ function applyStatus(status) {
   // Parameters may change while running; reading them on pause gives a consistent snapshot.
   if (status.state === 'paused' && !wasPaused) shared.paramTree.load();
   const stopped = status.state === 'paused' || status.state === 'halted';
-  if (stopped !== shared.registerTree.stopped) shared.registerTree.setStopped(stopped);
+  crossUi.agentState(stopped);
 }
 
 /** Connect to an agent. auto: started by "Start Simulation", so wait for elaboration and stay quiet on failure. */
@@ -167,7 +173,7 @@ async function connectAgent({ host = '127.0.0.1', port, auto, handshake = false 
   };
   shared.agentPoll = setInterval(poll, 1000);
   await poll();
-  shared.paramTree.load();  traceUi.traceConnected(); profileUi.profileConnected();
+  shared.paramTree.load();  traceUi.traceConnected(); profileUi.profileConnected(); excUi.excConnected();
 }
 
 function disconnectAgent() {

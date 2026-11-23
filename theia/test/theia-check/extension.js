@@ -32,6 +32,11 @@ exports.activate = async () => {
     step('check qbox version', {});
     const debugTypes = vscode.extensions.all.filter((e) => (e.packageJSON.contributes || {}).debuggers).map((e) => `${e.id}: ${e.packageJSON.contributes.debuggers.map((d) => d.type).join(',')}`);
     step('debuggers', { debugTypes });
+    const mi = vscode.extensions.getExtension('eclipse-cdt.memory-inspector');
+    if (mi && !mi.isActive) await mi.activate();
+    const miCmds = (await vscode.commands.getCommands(true)).filter((c) => c.startsWith('memory-inspector.'));
+    if (miCmds.includes('memory-inspector.show')) await vscode.commands.executeCommand('memory-inspector.show');
+    step('memory inspector', { version: mi && mi.packageJSON.version, isActive: mi && mi.isActive, commands: miCmds.length, tabs: vscode.window.tabGroups ? vscode.window.tabGroups.all.flatMap((g) => g.tabs.map((t) => t.label)) : 'n/a' });
     if (process.env.VPS_CHECK_BUILD) {
       // Build Sim Agent from inside the application: it must write to the
       // user data folder, since the application folder may be read-only.

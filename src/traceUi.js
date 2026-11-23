@@ -8,6 +8,7 @@ const core = require('../lib/platform/core');
 const trace = require('../lib/analysis/trace');
 const traceview = require('../lib/webview/traceview');
 const shared = require('./shared');
+const crossUi = require('./crossUi');
 const common = require('./common');
 const catalogUi = require('./catalogUi');
 const platformFiles = require('./platformFiles');
@@ -125,6 +126,7 @@ async function handleTraceMessage(m) {
   if (m.type === 'ready') {
     // A (re)loaded page gets what was already read, then the polling continues.
     if (shared.traceRecords.length) shared.tracePanel.webview.postMessage({ type: 'records', records: shared.traceRecords, points: shared.tracePoints });
+    shared.tracePanel.webview.postMessage(Object.assign({ type: 'stopMark' }, crossUi.currentMark()));
     traceConnected();
     await syncBreaks();
     showHit(shared.agentStatus);
@@ -153,6 +155,7 @@ async function handleTraceMessage(m) {
     await saveBreaks(breaks().filter((b) => b.id !== m.id));
     await syncBreaks();
   } else if (m.type === 'showRoute') {
+    if (m.dir !== 'S') crossUi.revealRegister(m.address).catch(() => {});
     await showRouteInPlatform(m);
   } else if (m.type === 'continue') {
     await agentUi.cmdContinue();
@@ -208,6 +211,13 @@ function txState(key) {
 function postTxState() {
   for (const key of txWatch) { const p = common.panels.get(key); if (p) p.webview.postMessage(txState(key)); }
 }
+/** Mark the accesses made since the previous stop, in the panel and the Transactions tab (cross-probing). */
+function postStopMark(mark) {
+  const msg = { type: 'stopMark', from: mark.from, to: mark.to };
+  if (shared.tracePanel) shared.tracePanel.webview.postMessage(msg);
+  postTx(msg);
+}
+
 function postTx(msg) {
   if (!txWatching()) return;
   const p = common.panels.get(txKey());
@@ -362,6 +372,7 @@ async function cmdStartTrace(context, arg) {
 }
 
 exports.showHit = showHit;
+exports.postStopMark = postStopMark;
 exports.showTracePanel = showTracePanel;
 exports.txWatch = txWatch;
 exports.txState = txState;

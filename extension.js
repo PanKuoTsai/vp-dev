@@ -11,6 +11,13 @@ const qboxUi = require('./src/qboxUi');
 const checkpointUi = require('./src/checkpointUi');
 const kitUi = require('./src/kitUi');
 const debugUi = require('./src/debugUi');
+const memoryUi = require('./src/memoryUi');
+const excUi = require('./src/excUi');
+const gicUi = require('./src/gicUi');
+const mmuUi = require('./src/mmuUi');
+const kmodUi = require('./src/kmodUi');
+const gdbUi = require('./src/gdbUi');
+const crossUi = require('./src/crossUi');
 const simUi = require('./src/simUi');
 const remoteUi = require('./src/remoteUi');
 const askpassUi = require('./src/askpassUi');
@@ -83,6 +90,22 @@ function activate(context) {
   reg('vpStudio.refreshParams', () => shared.paramTree.load());
   reg('vpStudio.refreshGuest', () => shared.guestTree.refresh());
   reg('vpStudio.showKernelLog', () => linuxUi.cmdShowKernelLog().catch((e) => vscode.window.showErrorMessage(`Could not read the kernel log: ${e.message}`)));
+  reg('vpStudio.debugLayout', debugUi.cmdDebugLayout);
+  reg('vpStudio.showExceptions', excUi.cmdShowExceptions);
+  reg('vpStudio.showGic', gicUi.cmdShowGic);
+  reg('vpStudio.translateAddress', mmuUi.cmdTranslate);
+  reg('vpStudio.findMemory', () => gdbUi.cmdFindMemory().catch((e) => vscode.window.showErrorMessage(`Find in Memory: ${e.message}`)));
+  reg('vpStudio.viewAsType', () => gdbUi.cmdViewAsType().catch((e) => vscode.window.showErrorMessage(`View Address as Type: ${e.message}`)));
+  reg('vpStudio.loadSymbols', () => gdbUi.cmdLoadSymbols().catch((e) => vscode.window.showErrorMessage(`Load Symbol File: ${e.message}`)));
+  reg('vpStudio.cpuStepping', () => gdbUi.cmdStepping().catch((e) => vscode.window.showErrorMessage(`CPU Stepping: ${e.message}`)));
+  reg('vpStudio.loadModuleSymbols', () => kmodUi.cmdLoadModules().catch((e) => vscode.window.showErrorMessage(`Kernel module symbols: ${e.message}`)));
+  reg('vpStudio.jumpToCursor', (uri) => gdbUi.cmdJumpToCursor(uri).catch((e) => vscode.window.showErrorMessage(`Jump to Cursor: ${e.message}`)));
+  reg('vpStudio.qemuMonitor', () => gdbUi.cmdMonitor().catch((e) => vscode.window.showErrorMessage(`QEMU Monitor: ${e.message}`)));
+  context.subscriptions.push(vscode.debug.registerDebugAdapterTrackerFactory(linuxUi.DEBUG_TYPE, gdbUi.trackerFactory()));
+  context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(gdbUi.SCHEME, gdbUi.provider));
+  reg('vpStudio.addConditionalBreakpoint', debugUi.cmdAddConditionalBreakpoint);
+  reg('vpStudio.showDisassembly', debugUi.openDisassembly);
+  reg('vpStudio.showMemory', (arg) => memoryUi.showMemory(typeof arg === 'string' ? arg : undefined));
   reg('vpStudio.showCpuRegisters', () => vscode.commands.executeCommand('vpStudio.cpuRegisters.focus'));
   reg('vpStudio.mapSources', () => linuxUi.cmdMapSources().catch((e) => vscode.window.showErrorMessage(`Could not map the kernel sources: ${e.message}`)));
   reg('vpStudio.copyParam', paramsUi.cmdCopyParam);
@@ -143,7 +166,7 @@ function activate(context) {
     vscode.window.registerTreeDataProvider('vpStudio.actions', shared.actionsTree),
     vscode.window.registerTreeDataProvider('vpStudio.modules', tree),
     vscode.window.registerTreeDataProvider('vpStudio.params', shared.paramTree),
-    vscode.window.registerTreeDataProvider('vpStudio.registers', shared.registerTree),
+    ...(shared.registerViews = [vscode.window.createTreeView('vpStudio.registers', { treeDataProvider: shared.registerTree }), vscode.window.createTreeView('vpStudio.debugRegisters', { treeDataProvider: shared.registerTree })]),
     ...guestViews(),
     vscode.workspace.onDidOpenTextDocument(changed),
     vscode.workspace.onDidChangeTextDocument((e) => changed(e.document)),
@@ -169,7 +192,7 @@ function guestViews() {
   if (vscode.debug.activeDebugSession) { shared.guestTree.sessionStarted(vscode.debug.activeDebugSession); shared.cpuRegsView.sessionStarted(vscode.debug.activeDebugSession); }
   const extra = [];
   // Selecting another CPU in Call Stack (VS Code 1.90+; not in every host).
-  if (typeof vscode.debug.onDidChangeActiveStackItem === 'function') extra.push(vscode.debug.onDidChangeActiveStackItem((item) => shared.cpuRegsView.onActiveStackItem(item)));
+  if (typeof vscode.debug.onDidChangeActiveStackItem === 'function') extra.push(vscode.debug.onDidChangeActiveStackItem((item) => { shared.cpuRegsView.onActiveStackItem(item); mmuUi.onDebugChange(); }));
   return [
     view,
     vscode.window.registerWebviewViewProvider('vpStudio.cpuRegisters', shared.cpuRegsView),
@@ -180,18 +203,18 @@ function guestViews() {
         return {
           onDidSendMessage(m) {
             if (m.type !== 'event') return;
-            if (m.event === 'stopped') { shared.guestTree.onStopped(s); shared.cpuRegsView.onStopped(s, m.body && m.body.threadId); }
-            else if (m.event === 'continued') { shared.guestTree.onRunning(s); shared.cpuRegsView.onRunning(s); }
+            if (m.event === 'stopped') { shared.guestTree.onStopped(s); shared.cpuRegsView.onStopped(s, m.body && m.body.threadId); crossUi.debugStoppedEvent(); mmuUi.onDebugChange(); kmodUi.onStopped(s); }
+            else if (m.event === 'continued') { shared.guestTree.onRunning(s); shared.cpuRegsView.onRunning(s); crossUi.debugRunningEvent(); }
           },
           onWillReceiveMessage(m) {
             // VS Code's own resume requests: CDT does not always send "continued".
-            if (m.type === 'request' && /^(continue|next|stepIn|stepOut|stepBack|reverseContinue)$/.test(m.command)) { shared.guestTree.onRunning(s); shared.cpuRegsView.onRunning(s); }
+            if (m.type === 'request' && /^(continue|next|stepIn|stepOut|stepBack|reverseContinue)$/.test(m.command)) { shared.guestTree.onRunning(s); shared.cpuRegsView.onRunning(s); crossUi.debugRunningEvent(); }
           },
         };
       },
     }),
-    vscode.debug.onDidStartDebugSession((s) => { shared.guestTree.sessionStarted(s); shared.cpuRegsView.sessionStarted(s); }),
-    vscode.debug.onDidTerminateDebugSession((s) => { shared.guestTree.sessionEnded(s); shared.cpuRegsView.sessionEnded(s); }),
+    vscode.debug.onDidStartDebugSession((s) => { shared.guestTree.sessionStarted(s); shared.cpuRegsView.sessionStarted(s); memoryUi.sessionStarted(s); }),
+    vscode.debug.onDidTerminateDebugSession((s) => { shared.guestTree.sessionEnded(s); shared.cpuRegsView.sessionEnded(s); memoryUi.sessionEnded(s); mmuUi.sessionEnded(s); kmodUi.sessionEnded(s); }),
   ];
 }
 

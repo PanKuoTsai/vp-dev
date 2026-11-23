@@ -18,12 +18,12 @@
 
 兩種形態，功能相同，擇一即可：
 
-- **獨立程式**（不需要 VS Code）：執行 `./VP-Studio-0.2.3-x86_64.AppImage ~/qbox`（需要 `libfuse2`）。已內建 CDT GDB Debug Adapter 與 JSON 語言支援。建置方式見 `theia/README.md`。
+- **獨立程式**（不需要 VS Code）：執行 `./VP-Studio-0.2.5-x86_64.AppImage ~/qbox`（需要 `libfuse2`）。已內建 CDT GDB Debug Adapter 與 JSON 語言支援。建置方式見 `theia/README.md`。
 
   在 Ubuntu 23.10、24.04 以後，直接執行會立刻中止，訊息是 `The SUID sandbox helper binary was found, but is not configured correctly`。這時要自己加上 `--no-sandbox`：
 
   ```sh
-  ./VP-Studio-0.2.3-x86_64.AppImage --no-sandbox ~/qbox
+  ./VP-Studio-0.2.5-x86_64.AppImage --no-sandbox ~/qbox
   ```
 
   原因：這些版本預設禁止一般使用者建立 user namespace（`kernel.apparmor_restrict_unprivileged_userns = 1`），Chromium 的沙箱因此改用 setuid 的 `chrome-sandbox`，而 AppImage 裡的檔案不可能屬於 root。用 `sysctl kernel.apparmor_restrict_unprivileged_userns` 檢查：值是 1 才需要加；Ubuntu 22.04、RHEL/Rocky、Fedora、Debian 等預設可直接執行。
@@ -241,15 +241,15 @@ VP Studio 與 QBox 都只在 Linux 上執行。Windows 上的做法是在 WSL2 �
 6. **執行獨立版**：把下載的 AppImage 從 Windows 複製進來（`<使用者>` 換成 Windows 的帳號名稱）再執行。視窗會出現在 Windows 桌面上：
 
    ```sh
-   cp /mnt/c/Users/<使用者>/Downloads/VP-Studio-0.2.3-x86_64.AppImage ~/
-   chmod +x ~/VP-Studio-0.2.3-x86_64.AppImage
-   ~/VP-Studio-0.2.3-x86_64.AppImage ~/qbox
+   cp /mnt/c/Users/<使用者>/Downloads/VP-Studio-0.2.5-x86_64.AppImage ~/
+   chmod +x ~/VP-Studio-0.2.5-x86_64.AppImage
+   ~/VP-Studio-0.2.5-x86_64.AppImage ~/qbox
    ```
 
    - 出現 FUSE 相關錯誤（例如 `dlopen(): error loading libfuse.so.2` 或 `fuse: device not found`）時，改成解開後執行：
 
      ```sh
-     cd ~ && ./VP-Studio-0.2.3-x86_64.AppImage --appimage-extract
+     cd ~ && ./VP-Studio-0.2.5-x86_64.AppImage --appimage-extract
      ~/squashfs-root/AppRun ~/qbox
      ```
 

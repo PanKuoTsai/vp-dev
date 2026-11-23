@@ -13,11 +13,17 @@ const guestlinux = require('../lib/debug/guestlinux');
 const thirdparty = require('../lib/debug/thirdparty');
 const cpuregs = require('../lib/debug/cpuregs');
 const cpuregsview = require('../lib/webview/cpuregsview');
+const layout = require('../lib/debug/layout');
+const breakpoints = require('../lib/debug/breakpoints');
+const gdbtargets = require('../lib/debug/gdbtargets');
 const common = require('./common');
+const shared = require('./shared');
 const catalogUi = require('./catalogUi');
 const platformFiles = require('./platformFiles');
 const simUi = require('./simUi');
+const mmuUi = require('./mmuUi');
 const linuxUi = require('./linuxUi');
+const memoryUi = require('./memoryUi');
 
 /**
  * Third-Party Debugger Setup… (G-11): a TRACE32 script and a guide for
@@ -111,6 +117,9 @@ class CpuRegsView {
       if (m.type === 'ready') { if (this.last) this.post(this.last); this.refresh(); }
       else if (m.type === 'refresh') this.refresh(true);
       else if (m.type === 'copy') vscode.env.clipboard.writeText(String(m.text || ''));
+      else if (m.type === 'memory') memoryUi.showMemory(String(m.value || ''));
+      else if (m.type === 'disassembly') openDisassembly();
+      else if (m.type === 'translate') mmuUi.cmdTranslate(String(m.value || ''));
     });
     view.onDidChangeVisibility(() => { if (view.visible) this.refresh(); });
   }
@@ -222,6 +231,23 @@ async function cmdAddDebugConfigs(arg) {
       program: '${workspaceFolder}/' + c.get('executable'), processId: '${input:vpStudioPid}',
     },
   ];
+  // More QEMU instances: one configuration per instance (its own gdb port, no kernel symbols),
+  // and a compound that attaches to all of them.
+  let targets = [];
+  if (platformUri) {
+    try {
+      const data = JSON.parse((await vscode.workspace.openTextDocument(platformUri)).getText());
+      targets = gdbtargets.targets(data, { basePort: Number(c.get('debug.gdbPort')), preferCpu: c.get('debug.cpuInstance'), param: c.get('debug.gdbPortParam') });
+    } catch (e) { targets = []; }
+  }
+  const extra = targets.slice(1).map((t, k) => {
+    const x = Object.assign({}, target, { name: gdbtargets.configName(t, k + 1), target: Object.assign({}, target.target, { port: String(t.port) }) });
+    delete x.program;
+    delete x.initCommands;
+    return x;
+  });
+  if (targets.length > 1) target.target.port = String(targets[0].port);
+  wanted.splice(1, 0, ...extra);
   const input = { id: 'vpStudioPid', type: 'promptString', description: 'Process id of the simulator (pgrep platforms-vp)' };
   const launch = vscode.workspace.getConfiguration('launch', folder.uri);
   const configs = (launch.get('configurations') || []).slice();
@@ -262,6 +288,11 @@ async function cmdAddDebugConfigs(arg) {
     }
   }
   if (!common.IS_WINDOWS && !inputs.some((x) => x.id === input.id)) inputs.push(input);
+  if (extra.length) {
+    const compounds = (launch.get('compounds') || []).filter((x) => x.name !== gdbtargets.COMPOUND_NAME);
+    compounds.push({ name: gdbtargets.COMPOUND_NAME, configurations: [target.name, ...extra.map((x) => x.name)] });
+    await launch.update('compounds', compounds, vscode.ConfigurationTarget.WorkspaceFolder);
+  }
   await launch.update('configurations', configs, vscode.ConfigurationTarget.WorkspaceFolder);
   await launch.update('inputs', inputs, vscode.ConfigurationTarget.WorkspaceFolder);
   const sym = symbols.length
@@ -270,11 +301,112 @@ async function cmdAddDebugConfigs(arg) {
   vscode.window.showInformationMessage(
     (added ? `Added ${added} debug configuration(s) to launch.json. ` : relinked ? 'Updated the target debug configuration. ' : 'The debug configurations are already in launch.json. ') +
     sym + (target.openGdbConsole ? ' Type gdb commands (info threads, x/4i $pc) in the "gdb" terminal that opens with the debug session.' : '') +
-    (added ? ' They need the CDT GDB Debug Adapter extension.' : ''));
+    (added ? ' They need the CDT GDB Debug Adapter extension.' : '') +
+    (extra.length ? ` The platform has ${targets.length} QEMU instances (${targets.map((t) => `${t.qemu} on port ${t.port}`).join(', ')}): "${gdbtargets.COMPOUND_NAME}" attaches to all of them.` : ''));
+}
+
+/** Open VS Code's Disassembly View at the instruction pointer of the CPU and frame selected in Call Stack. */
+async function openDisassembly() {
+  const [section, key] = [layout.SOURCE_SETTING.slice(0, layout.SOURCE_SETTING.lastIndexOf('.')), layout.SOURCE_SETTING.slice(layout.SOURCE_SETTING.lastIndexOf('.') + 1)];
+  const cfg = vscode.workspace.getConfiguration(section);
+  if (layout.offerPlainDisassembly(cfg.inspect(key))) {
+    const pick = await vscode.window.showInformationMessage(
+      'With source lines mixed in, the Disassembly View shows the kernel\'s instructions out of address order. Show instructions only in this workspace?',
+      { modal: true, detail: `Sets "${layout.SOURCE_SETTING}": false in the workspace settings. Change it back in Settings at any time.` }, 'Instructions Only', 'Keep Source Lines');
+    if (pick === 'Instructions Only') await cfg.update(key, false, vscode.workspace.workspaceFolders ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
+    else if (pick === 'Keep Source Lines') await cfg.update(key, true, vscode.workspace.workspaceFolders ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global);
+    else return false;
+  }
+  try { await vscode.commands.executeCommand(layout.DISASSEMBLY_COMMAND); return true; } catch (e) {
+    vscode.window.showWarningMessage(`Could not open the Disassembly View: ${e.message}`);
+    return false;
+  }
+}
+
+const tabLabels = () => (vscode.window.tabGroups ? vscode.window.tabGroups.all.flatMap((g) => g.tabs.map((t) => t.label)) : []);
+
+/**
+ * Debug Layout: the Run and Debug side bar (Call Stack, Breakpoints, CPU and
+ * Peripheral Registers), the source on the left, Disassembly above Memory on the
+ * right. Panes that are already open are kept, not opened again.
+ */
+async function cmdDebugLayout() {
+  const s = vscode.debug.activeDebugSession;
+  if (!s || s.type !== linuxUi.DEBUG_TYPE) {
+    vscode.window.showWarningMessage('Attach the debugger to the target ("VP: attach to target software") first, then use Debug Layout.');
+    return;
+  }
+  await vscode.commands.executeCommand('workbench.view.debug');
+  const stopped = shared.cpuRegsView && shared.cpuRegsView.stopped;
+  const need = layout.missingPanes(tabLabels());
+  const problems = [];
+  try { await vscode.commands.executeCommand('vscode.setEditorLayout', layout.EDITOR_LAYOUT); } catch (e) { problems.push(`editor layout: ${e.message}`); }
+  if (!stopped) {
+    vscode.window.showInformationMessage('Debug Layout: pause the target (F6), then run Debug Layout again to open Disassembly and Memory.');
+    return;
+  }
+  if (need.disassembly) {
+    await vscode.commands.executeCommand('workbench.action.focusSecondEditorGroup');
+    if (!await openDisassembly()) problems.push('disassembly');
+  }
+  if (need.memory) {
+    await vscode.commands.executeCommand('workbench.action.focusThirdEditorGroup');
+    if (!await memoryUi.showMemory('$sp')) problems.push('memory');
+  }
+  await vscode.commands.executeCommand('workbench.action.focusFirstEditorGroup');
+  if (problems.length) vscode.window.showWarningMessage(`Debug Layout: could not open ${problems.join(', ')}.`);
+}
+
+/**
+ * Add Conditional Breakpoint…: a breakpoint on a function with a condition and
+ * a hit count. The CDT adapter ignores both on function breakpoints, so this
+ * sets a source line breakpoint at the function's first line, found in gdb.
+ */
+async function cmdAddConditionalBreakpoint() {
+  const s = vscode.debug.activeDebugSession;
+  if (!s || s.type !== linuxUi.DEBUG_TYPE) {
+    vscode.window.showWarningMessage('Attach the debugger to the target ("VP: attach to target software") first.');
+    return;
+  }
+  if (!(shared.cpuRegsView && shared.cpuRegsView.stopped)) {
+    vscode.window.showWarningMessage('Pause the target (F6) first: the function is looked up in gdb, which needs a stopped target.');
+    return;
+  }
+  const name = await vscode.window.showInputBox({ title: 'Conditional Breakpoint (1/3): function', placeHolder: 'update_process_times', prompt: 'Function to stop in',
+    validateInput: (v) => { try { breakpoints.symbolCommand(v.trim()); return undefined; } catch (e) { return 'Enter a function name'; } } });
+  if (!name) return;
+  const fn = name.trim();
+  let locs;
+  try {
+    const body = await s.customRequest('evaluate', guestlinux.evaluateArgs(breakpoints.symbolCommand(fn)));
+    locs = breakpoints.functionLocations(guestlinux.parseResult(body), fn);
+  } catch (e) { vscode.window.showErrorMessage(`Could not look up ${fn}: ${e.message}`); return; }
+  if (!locs.length) { vscode.window.showErrorMessage(`No function ${fn} with debug information. Check the name and that the symbol file (for example vmlinux) is loaded.`); return; }
+  let loc = locs[0];
+  if (locs.length > 1) {
+    const items = locs.map((l) => ({ label: `${path.basename(l.file)}:${l.line}`, description: l.file }));
+    const pick = await vscode.window.showQuickPick(items, { title: `${fn} is defined in more than one file` });
+    if (!pick) return;
+    loc = locs[items.indexOf(pick)];
+  }
+  const condition = await vscode.window.showInputBox({ title: 'Conditional Breakpoint (2/3): condition', prompt: 'A C expression gdb evaluates at each hit; empty for none. Registers are $x0, $sp…',
+    placeHolder: 'user_tick == 0' });
+  if (condition === undefined) return;
+  const hitText = await vscode.window.showInputBox({ title: 'Conditional Breakpoint (3/3): hit count', prompt: 'N: stop once, on the Nth hit (the breakpoint then goes away in gdb). >N: stop on every hit after the Nth. Empty: every hit.',
+    placeHolder: '>5', validateInput: (v) => { try { breakpoints.normalizeHitCount(v); return undefined; } catch (e) { return e.message; } } });
+  if (hitText === undefined) return;
+  const hit = breakpoints.normalizeHitCount(hitText);
+  const at = new vscode.Location(vscode.Uri.file(loc.file), new vscode.Position(loc.line - 1, 0));
+  vscode.debug.addBreakpoints([new vscode.SourceBreakpoint(at, true, condition.trim() || undefined, hit || undefined)]);
+  vscode.window.showInformationMessage(`Breakpoint: ${breakpoints.describe(fn, loc, condition.trim(), hit)}. It is in the Breakpoints view; right-click it there to edit the condition or hit count.`);
 }
 
 exports.cmdThirdPartyDebuggers = cmdThirdPartyDebuggers;
+exports.cmdAddConditionalBreakpoint = cmdAddConditionalBreakpoint;
+exports.cmdDebugLayout = cmdDebugLayout;
+exports.openDisassembly = openDisassembly;
 exports.cmdStartOpenOcd = cmdStartOpenOcd;
 exports.writeOpenOcdConfig = writeOpenOcdConfig;
 exports.CpuRegsView = CpuRegsView;
+exports.symbolFilesFor = symbolFilesFor;
 exports.cmdAddDebugConfigs = cmdAddDebugConfigs;

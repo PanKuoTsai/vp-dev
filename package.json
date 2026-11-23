@@ -2,7 +2,7 @@
   "name": "vp-studio",
   "displayName": "VP Studio",
   "description": "Configure, inspect, run and debug QBox-based virtual platforms from a JSON platform description.",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "publisher": "novatek",
   "repository": {
     "type": "git",
@@ -74,6 +74,20 @@
       { "command": "vpStudio.importIpxact", "title": "Import IP-XACT…", "category": "VP Studio", "icon": "$(desktop-download)" },
       { "command": "vpStudio.thirdPartyDebuggers", "title": "Third-Party Debugger Setup…", "category": "VP Studio", "icon": "$(link-external)" },
       { "command": "vpStudio.showCpuRegisters", "title": "Show CPU Registers", "category": "VP Studio", "icon": "$(symbol-variable)" },
+      { "command": "vpStudio.showMemory", "title": "Show Memory…", "category": "VP Studio", "icon": "$(file-binary)" },
+      { "command": "vpStudio.translateAddress", "title": "Translate Virtual Address…", "category": "VP Studio", "icon": "$(symbol-reference)" },
+      { "command": "vpStudio.showDisassembly", "title": "Show Disassembly", "category": "VP Studio", "icon": "$(list-flat)" },
+      { "command": "vpStudio.debugLayout", "title": "Debug Layout", "category": "VP Studio", "icon": "$(layout)" },
+      { "command": "vpStudio.addConditionalBreakpoint", "title": "Add Conditional Breakpoint…", "category": "VP Studio", "icon": "$(debug-breakpoint-conditional)" },
+      { "command": "vpStudio.showExceptions", "title": "Exceptions & Interrupts", "category": "VP Studio", "icon": "$(zap)" },
+      { "command": "vpStudio.showGic", "title": "Interrupt Controller (GIC)", "category": "VP Studio", "icon": "$(bell)" },
+      { "command": "vpStudio.findMemory", "title": "Find in Memory…", "category": "VP Studio", "icon": "$(search)" },
+      { "command": "vpStudio.viewAsType", "title": "View Address as Type…", "category": "VP Studio", "icon": "$(symbol-structure)" },
+      { "command": "vpStudio.loadSymbols", "title": "Load Symbol File at Address…", "category": "VP Studio", "icon": "$(file-binary)" },
+      { "command": "vpStudio.cpuStepping", "title": "CPU Stepping…", "category": "VP Studio", "icon": "$(debug-step-into)" },
+      { "command": "vpStudio.loadModuleSymbols", "title": "Load Kernel Module Symbols", "category": "VP Studio", "icon": "$(symbol-module)" },
+      { "command": "vpStudio.jumpToCursor", "title": "Jump to Cursor (Set PC)", "category": "VP Studio", "icon": "$(debug-line-by-line)" },
+      { "command": "vpStudio.qemuMonitor", "title": "QEMU Monitor…", "category": "VP Studio", "icon": "$(terminal)" },
       { "command": "vpStudio.mapSources", "title": "Map Kernel Sources…", "category": "VP Studio", "icon": "$(file-symlink-directory)", "enablement": "vpStudio.guestDebug" },
       { "command": "vpStudio.remote.selectHost", "title": "Select Simulation Host…", "category": "VP Studio", "icon": "$(remote)" },
       { "command": "vpStudio.remote.check", "title": "Check Remote Host", "category": "VP Studio", "icon": "$(vm-connect)" },
@@ -137,8 +151,22 @@
       "vpStudio.menu.debug": [
         { "command": "vpStudio.addDebugConfigurations", "group": "1_section@1" },
         { "command": "vpStudio.thirdPartyDebuggers", "group": "1_section@2" },
-        { "command": "vpStudio.showCpuRegisters", "group": "2_section@1" },
-        { "command": "vpStudio.mapSources", "when": "vpStudio.guestDebug", "group": "2_section@2" }
+        { "command": "vpStudio.debugLayout", "group": "2_section@1" },
+        { "command": "vpStudio.showCpuRegisters", "group": "2_section@2" },
+        { "command": "vpStudio.showDisassembly", "group": "2_section@3" },
+        { "command": "vpStudio.showMemory", "group": "2_section@4" },
+        { "command": "vpStudio.translateAddress", "group": "2_section@5" },
+        { "command": "vpStudio.addConditionalBreakpoint", "group": "2_section@6" },
+        { "command": "vpStudio.showExceptions", "group": "2_section@7" },
+        { "command": "vpStudio.showGic", "group": "2_section@8" },
+        { "command": "vpStudio.mapSources", "when": "vpStudio.guestDebug", "group": "2_section@9" },
+        { "command": "vpStudio.findMemory", "group": "3_section@1" },
+        { "command": "vpStudio.viewAsType", "group": "3_section@2" },
+        { "command": "vpStudio.loadSymbols", "group": "3_section@3" },
+        { "command": "vpStudio.loadModuleSymbols", "group": "3_section@4" },
+        { "command": "vpStudio.cpuStepping", "group": "3_section@5" },
+        { "command": "vpStudio.jumpToCursor", "group": "3_section@6" },
+        { "command": "vpStudio.qemuMonitor", "group": "3_section@7" }
       ],
       "vpStudio.menu.platform": [
         { "command": "vpStudio.showPlatform", "group": "1_section@1" },
@@ -190,16 +218,21 @@
         { "command": "vpStudio.runUntil", "when": "view == vpStudio.params && vpStudio.agentConnected", "group": "1_run@2" },
         { "command": "vpStudio.pause", "when": "view == vpStudio.registers && vpStudio.agentConnected && !vpStudio.paused", "group": "navigation@1" },
         { "command": "vpStudio.continue", "when": "view == vpStudio.registers && vpStudio.paused", "group": "navigation@1" },
-        { "command": "vpStudio.refreshRegisters", "when": "view == vpStudio.registers && vpStudio.agentConnected", "group": "navigation@2" }
+        { "command": "vpStudio.refreshRegisters", "when": "view == vpStudio.registers && vpStudio.agentConnected", "group": "navigation@2" },
+        { "command": "vpStudio.debugLayout", "when": "view == vpStudio.cpuRegisters", "group": "navigation@1" },
+        { "command": "vpStudio.showDisassembly", "when": "view == vpStudio.cpuRegisters", "group": "navigation@2" },
+        { "command": "vpStudio.showMemory", "when": "view == vpStudio.cpuRegisters", "group": "navigation@3" },
+        { "command": "vpStudio.refreshRegisters", "when": "view == vpStudio.debugRegisters", "group": "navigation@1" },
+        { "command": "vpStudio.addConditionalBreakpoint", "when": "view == workbench.debug.breakPointsView && debugType == 'gdbtarget'", "group": "navigation@1" }
       ],
       "view/item/context": [
         { "command": "vpStudio.setParam", "when": "view == vpStudio.params && viewItem == vpParam", "group": "inline" },
         { "command": "vpStudio.setParam", "when": "view == vpStudio.params && viewItem == vpParam", "group": "1_edit@1" },
         { "command": "vpStudio.copyParam", "when": "view == vpStudio.params && viewItem =~ /^vpParam/", "group": "1_edit@2" },
-        { "command": "vpStudio.setRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpRegW|^vpField$/", "group": "inline" },
-        { "command": "vpStudio.setRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpRegW|^vpField$/", "group": "1_edit@1" },
-        { "command": "vpStudio.readRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpReg(RO|W)Unread$/", "group": "inline" },
-        { "command": "vpStudio.readRegister", "when": "view == vpStudio.registers && viewItem =~ /^vpReg/", "group": "1_edit@2" }
+        { "command": "vpStudio.setRegister", "when": "view =~ /^vpStudio\\.(registers|debugRegisters)$/ && viewItem =~ /^vpRegW|^vpField$/", "group": "inline" },
+        { "command": "vpStudio.setRegister", "when": "view =~ /^vpStudio\\.(registers|debugRegisters)$/ && viewItem =~ /^vpRegW|^vpField$/", "group": "1_edit@1" },
+        { "command": "vpStudio.readRegister", "when": "view =~ /^vpStudio\\.(registers|debugRegisters)$/ && viewItem =~ /^vpReg(RO|W)Unread$/", "group": "inline" },
+        { "command": "vpStudio.readRegister", "when": "view =~ /^vpStudio\\.(registers|debugRegisters)$/ && viewItem =~ /^vpReg/", "group": "1_edit@2" }
       ],
       "explorer/context": [
         { "command": "vpStudio.generate", "when": "resourceFilename =~ /\\.platform\\.json$/", "group": "vpStudio@1" },
@@ -212,6 +245,9 @@
         { "command": "vpStudio.buildModel", "when": "resourceFilename =~ /\\.model\\.json$/", "group": "vpStudio@1" },
         { "command": "vpStudio.importIpxact", "when": "resourceExtname == .xml", "group": "vpStudio@1" },
         { "command": "vpStudio.ftrace.convert", "when": "resourceExtname == .vpft", "group": "vpStudio@1" }
+      ],
+      "editor/context": [
+        { "command": "vpStudio.jumpToCursor", "when": "debugType == 'gdbtarget' && debugState == 'stopped' && resourceScheme == 'file'", "group": "debug@3" }
       ],
       "commandPalette": [
         { "command": "vpStudio.stop", "when": "vpStudio.running" },
@@ -246,7 +282,8 @@
         { "id": "vpStudio.guest", "name": "Guest Processes", "when": "vpStudio.guestDebug" }
       ],
       "debug": [
-        { "type": "webview", "id": "vpStudio.cpuRegisters", "name": "CPU Registers", "when": "debugType == 'gdbtarget'" }
+        { "type": "webview", "id": "vpStudio.cpuRegisters", "name": "CPU Registers", "when": "debugType == 'gdbtarget'" },
+        { "id": "vpStudio.debugRegisters", "name": "Peripheral Registers", "when": "debugType == 'gdbtarget' && vpStudio.agentConnected" }
       ]
     },
     "viewsWelcome": [
@@ -274,10 +311,27 @@
           "additionalProperties": { "type": "string" },
           "description": "Where target debug sessions find sources built on another machine: { \"/build/linux-oPNunh/linux-5.15.0\": \"/home/me/src/linux-5.15.0\" }. Each entry becomes gdb's set substitute-path at attach. \"VP Studio: Map Kernel Sources…\" fills it in from a stopped frame."
         },
+        "vpStudio.exceptions.record": {
+          "type": "boolean",
+          "default": true,
+          "description": "Record the exceptions and interrupts the CPUs take (sim agent 0.15.0 or later), for the Exceptions & Interrupts panel and its catch rules. Takes effect at the next Start Simulation."
+        },
         "vpStudio.debug.linuxAwareness": {
           "type": "boolean",
           "default": true,
           "description": "Load VP Studio's Linux script (tools/gdb/vp-linux.py) in target debug sessions (type gdbtarget): on attach it moves the kernel symbols to the running kernel's KASLR offset, it adds the gdb commands vp-ps, vp-dmesg and vp-kaslr, and it feeds the Guest Processes view. Needs the kernel's vmlinux as the program."
+        },
+        "vpStudio.debug.moduleSymbols": {
+          "type": "boolean",
+          "default": true,
+          "description": "At the first stop of a target debug session, load the symbols of the guest's loaded Linux modules whose .ko files are found (vpStudio.debug.moduleDirs, or copied out of the disk image by Load Kernel Module Symbols). Needs vpStudio.debug.linuxAwareness."
+        },
+        "vpStudio.debug.moduleDirs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "scope": "machine-overridable",
+          "description": "Folders searched (with their subfolders) for the guest's kernel modules (.ko), before the modules/<release> folder next to vmlinux where Load Kernel Module Symbols copies them out of the disk image. Put .ko files with debug info here (for example from the kernel's -dbgsym package) to get source lines in modules."
         },
         "vpStudio.ftrace.bufferPerCpu": {
           "type": "integer",

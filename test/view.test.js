@@ -216,7 +216,14 @@ test('view: Transactions tab in the dock, and the page script compiles', () => {
 });
 
 test('webviews: the scripts of the profile and CPU register pages compile', () => {
-  for (const html of [require('../lib/webview/profileview').render('N2', 'x', 'Profile'), require('../lib/webview/cpuregsview').render('N2', 'x')]) {
+  const exc = require('../lib/webview/excview').render('N2', 'x', 'Exceptions & Interrupts: p', require('../lib/debug/exceptions').CATCH);
+  assert.ok(!/ style="/.test(exc));
+  const gicPage = require('../lib/webview/gicview').render('N2', 'x', 'Interrupts (GIC): p');
+  assert.ok(!/ style="/.test(gicPage));
+  const mmuPage = require('../lib/webview/mmuview').render('N2', 'x');
+  assert.ok(!/ style="/.test(mmuPage));
+  assert.ok(mmuPage.includes('.seg.b64{flex-grow:64}'));
+  for (const html of [require('../lib/webview/profileview').render('N2', 'x', 'Profile'), require('../lib/webview/cpuregsview').render('N2', 'x'), exc, gicPage, mmuPage]) {
     const scripts = [...html.matchAll(/<script nonce="N2">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
     assert.ok(scripts.length >= 1);
     for (const src of scripts) assert.doesNotThrow(() => new Function(src));

@@ -20,6 +20,7 @@ Theia **1.74.3** (the maintained 1.74 line), Electron 42.
 |---|---|---|
 | VP Studio | `../` packaged with vsce | The product |
 | `eclipse-cdt.cdt-gdb-vscode` 3.0.0 | Open VSX | Debugging target software (`gdbtarget`, `gdb`) |
+| `eclipse-cdt.memory-inspector` 1.3.0 | Open VSX | Memory view while debugging (address or expression, hex table, edit) |
 | `vscode.json`, `vscode.json-language-features` 1.95.3 | Open VSX | JSON language support, which applies the platform and model schemas |
 
 No Microsoft-proprietary extensions are used.
@@ -55,7 +56,7 @@ How long it takes:
   2 minutes.
 - **Later runs** (`--skip-install`): about 40 seconds.
 
-The result is `electron-app/dist/VP-Studio-0.2.3-x86_64.AppImage`, about
+The result is `electron-app/dist/VP-Studio-0.2.5-x86_64.AppImage`, about
 175 MB.
 
 Run the build from a plain terminal. A shell started by VS Code's extension
@@ -65,7 +66,7 @@ host carries `ELECTRON_RUN_AS_NODE=1`, which makes Electron run as plain Node.
 ## Run
 
 ```sh
-./VP-Studio-0.2.3-x86_64.AppImage ~/qbox     # the folder to open as the workspace
+./VP-Studio-0.2.5-x86_64.AppImage ~/qbox     # the folder to open as the workspace
 ```
 
 The AppImage needs FUSE 2 (`libfuse2`). Without it, set
@@ -78,7 +79,7 @@ On Ubuntu 23.10, 24.04 and later the AppImage stops at once with
 Start it with `--no-sandbox`:
 
 ```sh
-./VP-Studio-0.2.3-x86_64.AppImage --no-sandbox ~/qbox
+./VP-Studio-0.2.5-x86_64.AppImage --no-sandbox ~/qbox
 ```
 
 These releases do not let ordinary users create user namespaces

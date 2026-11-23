@@ -14,6 +14,7 @@ const pin = require('../lib/setup/pin');
 const diskspace = require('../lib/sim/diskspace');
 const launch = require('../lib/sim/launch');
 const ftrace = require('../lib/analysis/ftrace');
+const gdbtargets = require('../lib/debug/gdbtargets');
 const checkpoint = require('../lib/sim/checkpoint');
 const shared = require('./shared');
 const common = require('./common');
@@ -25,6 +26,7 @@ const remoteUi = require('./remoteUi');
 const askpassUi = require('./askpassUi');
 const versionUi = require('./versionUi');
 const agentUi = require('./agentUi');
+const excUi = require('./excUi');
 const traceUi = require('./traceUi');
 const profileUi = require('./profileUi');
 const menuUi = require('./menuUi');
@@ -66,19 +68,34 @@ function addAgentOptions(options, platform, { agentLib, agentVersion, agentPort,
       .then((x) => x && vscode.commands.executeCommand('vpStudio.buildSimAgent'));
     return undefined;
   }
-  if (opts.profile || opts.ftrace) {
-    // QBox's libidlinker plugin gives the agent a QEMU plugin id (G-05).
-    const q = core.analyze(platform.data).instances.find((i) => i.type === 'QemuInstance');
-    if (!q) { vscode.window.showErrorMessage(`${opts.profile ? 'Profiling' : 'The function trace'} needs a QemuInstance in the platform.`); return undefined; }
+  // QBox's libidlinker plugin gives the agent a QEMU plugin id (G-05), valid in the one QEMU instance
+  // it is loaded into. Agents before 0.16.0 use the first instance they find, which can be another
+  // one: with several instances they crash, so recording exceptions is left off for them.
+  const qemus = core.analyze(platform.data).instances.filter((i) => i.type === 'QemuInstance');
+  const pluginQemu = pin.versionAtLeast(agentVersion, '0.16.0');
+  let exc = excUi.wanted(agentVersion, pin.versionAtLeast);
+  if (exc && qemus.length > 1 && !pluginQemu) exc = false;
+  if ((opts.profile || opts.ftrace) && qemus.length > 1 && !pluginQemu) {
+    vscode.window.showErrorMessage(`${opts.profile ? 'Profiling' : 'The function trace'} of a platform with several QEMU instances needs sim agent 0.16.0 or later (this one is ${agentVersion || 'older'}). Rebuild it with "VP Studio: Build Sim Agent".`);
+    return undefined;
+  }
+  if (exc) options.extraModules[0].params.exceptions = true;
+  if (opts.profile || opts.ftrace || exc) {
+    const q = qemus[0];
+    if (!q && (opts.profile || opts.ftrace)) { vscode.window.showErrorMessage(`${opts.profile ? 'Profiling' : 'The function trace'} needs a QemuInstance in the platform.`); return undefined; }
+    if (!q) delete options.extraModules[0].params.exceptions;
     if (opts.profile) options.extraModules[0].params.profile = true;
     if (opts.ftrace) {
       options.extraModules[0].params.ftrace = true;
       const n = Number(c.get('ftrace.bufferPerCpu'));
       if (Number.isInteger(n) && n > 0) options.extraModules[0].params.ftrace_buffer = n;
     }
-    options.overrides = (options.overrides || []).concat([
-      { instance: q.name, param: 'qemu_args.-plugin', value: `libidlinker.so,key=platform.${agentUi.AGENT_INSTANCE}.profile_id` },
-    ]);
+    if (q) {
+      if (pluginQemu) options.extraModules[0].params.plugin_qemu = q.name;
+      options.overrides = (options.overrides || []).concat([
+        { instance: q.name, param: 'qemu_args.-plugin', value: `libidlinker.so,key=platform.${agentUi.AGENT_INSTANCE}.profile_id` },
+      ]);
+    }
   }
   // The probes and the debug port: QBox components for agent 0.14.0, the agent's library before.
   const libs = trace.probeLibraries(agentVersion, agentLib, pin.versionAtLeast);
@@ -139,8 +156,11 @@ function afterStart({ uri, platform, options, debug, port, traceIds, probeIds, r
   }
   if (opts.openocd) debugUi.writeOpenOcdConfig(uri, platform.data, opts.openocd.port).catch((e) => vscode.window.showErrorMessage(`Could not write the OpenOCD configuration: ${e.message}`));
   if (debug) {
+    const several = String(port).includes(',');
     vscode.window.showInformationMessage(
-      `Simulation started with a gdb server requested on port ${port}${remoteInfo ? ` (forwarded from ${remoteInfo.host})` : ''}. Attach with the "VP: attach to target software" debug configuration.`,
+      several
+        ? `Simulation started with a gdb server per QEMU instance, on ports ${port}. Attach with "${gdbtargets.COMPOUND_NAME}" (Add Debug Configurations writes one configuration per instance).`
+        : `Simulation started with a gdb server requested on port ${port}${remoteInfo ? ` (forwarded from ${remoteInfo.host})` : ''}. Attach with the "VP: attach to target software" debug configuration.`,
       'Add Debug Configurations').then((p) => p && debugUi.cmdAddDebugConfigs(uri));
   }
 }
@@ -170,10 +190,8 @@ async function start(arg, debug, traceIds = [], opts = {}) {
     return;
   }
   versionUi.warnVersions(exePath);
-  const port = c.get('debug.gdbPort');
-  const options = debug
-    ? { overrides: [{ instance: c.get('debug.cpuInstance'), param: c.get('debug.gdbPortParam'), value: port }] }
-    : {};
+  let port = c.get('debug.gdbPort');
+  const options = {};
   // Host ports the platform forwards (QEMU hostfwd): keep each configured
   // port when free, move it to a free one otherwise, so a second simulation
   // does not fail with "Could not set up host forwarding rule".
@@ -181,6 +199,14 @@ async function start(arg, debug, traceIds = [], opts = {}) {
   let hostPortValues = {};
   const platform = await platformFiles.load(uri);
   if (!platform) return;
+  // One gdb server per QEMU instance: each opens on one of its CPUs (gdbtargets).
+  let gdbTargets;
+  if (debug) {
+    gdbTargets = gdbtargets.targets(platform.data, { basePort: port, preferCpu: c.get('debug.cpuInstance'), param: c.get('debug.gdbPortParam') });
+    if (!gdbTargets.length) gdbTargets = [{ qemu: '', cpus: [], cpu: c.get('debug.cpuInstance'), port, preset: false }];
+    options.overrides = gdbtargets.overrides(gdbTargets, c.get('debug.gdbPortParam'));
+    port = gdbTargets.map((t) => t.port).join(', ');
+  }
   // G-08: start from a checkpoint. The disks are copies (or snapshot=on), so
   // the lock and free-space checks of the platform's own images do not apply.
   let restore;

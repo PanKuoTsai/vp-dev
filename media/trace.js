@@ -27,6 +27,7 @@ function setState() {
   $('record').setAttribute('aria-pressed', String(recording));
   $('record-t').textContent = recording ? 'Recording' : 'Record';
 }
+let mark = { from: 0, to: 0 }; // accesses made between the previous stop and the last one (cross-probing)
 const scroller = () => $('tmain'); // the table scrolls; the header and the figures never leave the top
 function draw() {
   const range = parseAddr($('addr').value);
@@ -41,7 +42,8 @@ function draw() {
   const frag = document.createDocumentFragment();
   for (const r of hits) {
     const tr = document.createElement('tr');
-    tr.className = r.dir + (r.status !== 'OK' ? ' err' : '') + (hitSeq && r.seq === hitSeq ? ' hitrow' : '') + (r.dir !== 'S' ? ' routable' : '') + (r.seq === routeSeq ? ' sel' : '');
+    tr.className = r.dir + (r.status !== 'OK' ? ' err' : '') + (hitSeq && r.seq === hitSeq ? ' hitrow' : '') + (r.dir !== 'S' ? ' routable' : '') + (r.seq === routeSeq ? ' sel' : '') + (r.seq > mark.from && r.seq <= mark.to ? ' since' : '');
+    if (r.seq > mark.from && r.seq <= mark.to) tr.title = 'Made since the previous stop';
     tr.dataset.seq = r.seq;
     if (r.dir !== 'S') { tr.tabIndex = 0; tr.title = 'Click to show the route of this access in the platform view'; }
     const access = r.dir === 'S' ? (r.value === '1' ? 'signal ↑' : 'signal ↓') : r.dir === 'W' ? 'write' : 'read';
@@ -140,6 +142,12 @@ window.addEventListener('message', (ev) => {
     if (m.points) setPoints(m.points);
     if (all.length > KEEP) all = all.slice(all.length - KEEP);
     if (m.status) { total = m.status.lastSeq; dropped = m.status.dropped; }
+    schedule();
+  } else if (m.type === 'stopMark') {
+    mark = { from: Number(m.from) || 0, to: Number(m.to) || 0 };
+    const n = Math.max(0, mark.to - mark.from);
+    $('sincenote').hidden = !mark.to;
+    $('sincenote').textContent = n ? `${n} access${n === 1 ? '' : 'es'} since the previous stop (marked)` : 'No access since the previous stop';
     schedule();
   } else if (m.type === 'cleared') { all = []; frozen = null; total = 0; dropped = 0; schedule(); }
   else if (m.type === 'probes') setProbes(m);

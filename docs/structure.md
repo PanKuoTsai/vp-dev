@@ -12,6 +12,12 @@ src/                         VS Code 整合：指令、診斷、樹狀檢視、w
   simUi.js                   啟動與停止模擬；agentUi.js 是 sim agent 連線、暫停與繼續；remoteUi.js、askpassUi.js 是遠端模擬
   traceUi.js、profileUi.js、ftraceUi.js、perfUi.js、registersUi.js、paramsUi.js   各分析面板與檢視
   debugUi.js、linuxUi.js     除錯設定、OpenOCD 埠、CPU 暫存器、Linux 感知
+  memoryUi.js                Show Memory…：以 Memory Inspector 開記憶體、詢問安裝、中途安裝時重新附加
+  excUi.js                   Exceptions & Interrupts 面板、攔截規則、停下時的提示
+  gicUi.js                   Interrupt Controller (GIC) 面板：經 agent 讀 GIC、何時重讀
+  gdbUi.js                   Find in Memory、View Address as Type、Load Symbol File、CPU Stepping、QEMU Monitor；收集 gdb 指令輸出
+  crossUi.js                 跨視圖聯動：何時算新的一次停下、標出變動的暫存器與其間的交易、由交易跳到暫存器
+  mmuUi.js                   Address Translation 面板：讀選取 CPU 的系統暫存器、經 agent 或 monitor xp 讀描述元、停下時重算
   其餘                       catalogUi、devicetreeUi、modelUi、qboxUi、versionUi、checkpointUi、kitUi、examplesUi、modulesTree、menuUi
 lib/                         核心邏輯，都不依賴 VS Code，可單獨測試；擴充套件與 vp-run 共用
 lib/platform/                平台描述：展開與分析、Lua 產生、依元件目錄檢查、保留格式的 JSON 編輯
@@ -42,10 +48,18 @@ lib/analysis/                觀測與分析：交易追蹤、剖析、函式追
   trace.js                   交易追蹤：可追蹤的埠、插入追蹤模組的產生器選項、記錄解碼與 CSV
   perf.js                    效能分析：執行一次或參數掃描、讀取統計、挑指標、CI 門檻（擴充套件與 vp-run 共用）
   qos.js                     at_bus 的 masters 參數：各 master 的 QoS 設定的解析與寫回
+  gic.js                     中斷控制器：平台中 GICv3 的位置與中斷來源、要讀的暫存器、每個 INTID 的狀態與送不到 CPU 的原因
 lib/debug/                   除錯：Linux 感知、CPU 暫存器、OpenOCD 埠、第三方除錯器
   thirdparty.js              第三方除錯器：gdbstub 位址、TRACE32 腳本、說明文件
   guestlinux.js              Linux 感知：經 CDT 對 tools/gdb/vp-linux.py 送指令、解讀結果
   cpuregs.js                 CPU 暫存器：分組、AArch64 PSTATE 解碼、上次停住後變動的值
+  memview.js                記憶體檢視：位址與運算式的整理、哪些暫存器值像位址、開 Memory Inspector 的參數
+  layout.js                  Debug Layout：編輯區版面、已開的窗格、反組譯是否混入原始碼的詢問
+  breakpoints.js             條件中斷點：以 gdb 找函式所在行、命中次數的寫法
+  exceptions.js              異常與中斷：解讀 agent 的事件（向量、ESR、FAR、系統呼叫）、Stop on 的規則、計數
+  syscalls-arm64.json        arm64 系統呼叫號碼與名稱（由 Linux 的 asm-generic/unistd.h 產生）
+  gdbtools.js                記憶體搜尋的樣式與分段搜尋、QEMU monitor 預設指令、型別轉換、add-symbol-file、scheduler-locking
+  mmu.js                     AArch64 第一階段位址轉換（EL1&0）：TCR／TTBR／MAIR 解讀、逐層走頁表、權限與記憶體屬性
   debugdap.js                OpenOCD 連接埠：在平台加入 debug_dap 模組、寫出 OpenOCD 設定
 lib/generate/                產生與匯入：device tree、建模精靈、IP-XACT
   modelgen.js                建模精靈：模型描述的檢查與 C++ 產生
@@ -65,6 +79,9 @@ lib/webview/                 各面板的 HTML（平台檢視、追蹤、剖析�
   traceview.js               Transaction Trace 面板的 HTML
   perfview.js                Performance 面板的 HTML
   cpuregsview.js             CPU Registers 檢視的 HTML
+  excview.js                 Exceptions & Interrupts 面板的 HTML（樣式與腳本在 media/exceptions.css、.js）
+  gicview.js                 Interrupt Controller (GIC) 面板的 HTML（media/gic.css、.js）
+  mmuview.js                 Address Translation 面板的 HTML（media/mmu.css、.js）
   qboxview.js                Build QBox 檢視的 HTML
   webtheme.js                各 webview 共用的外觀：圖示與 media/theme.css
   media.js                   讀取 media/ 中的樣式表與頁面腳本，供各頁面內嵌

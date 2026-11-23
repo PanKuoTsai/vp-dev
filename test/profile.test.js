@@ -222,3 +222,40 @@ test('ftrace: a BL whose function returns elsewhere ends its frame (JIT code, tr
   ]);
   assert.strictEqual(b.cpus[0].unmatched, 0);
 });
+
+test('function trace: the last calls of a CPU (ftrace.tail) as indented rows and the open call chain', () => {
+  const ft = require('../lib/analysis/ftrace');
+  const fns = [
+    { name: 'el0_svc', start: 0x1000n, size: 0x100n }, { name: 'do_sys_open', start: 0x2000n, size: 0x100n },
+    { name: 'getname', start: 0x3000n, size: 0x100n }, { name: 'kmem_cache_alloc', start: 0x4000n, size: 0x100n },
+    { name: 'strncpy_from_user', start: 0x5000n, size: 0x100n },
+  ].map((f) => Object.assign(f, { start: f.start + 0xffff800008000000n }));
+  const K = 0xffff800008000000n;
+  const hex = (n) => '0x' + (K + BigInt(n)).toString(16);
+  // el0_svc calls do_sys_open, which calls getname; getname calls kmem_cache_alloc (returns), then
+  // strncpy_from_user, which faults: the chain el0_svc > do_sys_open > getname > strncpy_from_user is open.
+  const res = { cpu: 2, total: 9, records: [
+    [hex(0x1010 | 1), hex(0x2000), 10, 100],
+    [hex(0x2020 | 1), hex(0x3000), 11, 120],
+    [hex(0x3010 | 1), hex(0x4000), 12, 130],
+    [hex(0x4050 | 2), hex(0x3014), 13, 160],
+    [hex(0x3030 | 1), hex(0x5000), 14, 170],
+  ] };
+  const ev = ft.tailEvents(res);
+  assert.deepStrictEqual(ev.map((e) => e.kind), [1, 1, 1, 2, 1]);
+  const r = ft.recentCalls(ev, ft.namer(fns, 0n));
+  assert.deepStrictEqual(r.rows.map((x) => [x.kind, x.depth, x.name, x.insnsBefore]), [
+    ['call', 0, 'do_sys_open', 70], ['call', 1, 'getname', 50], ['call', 2, 'kmem_cache_alloc', 40], ['ret', 2, 'kmem_cache_alloc', 10], ['call', 2, 'strncpy_from_user', 0]]);
+  assert.deepStrictEqual(r.open, ['do_sys_open', 'getname', 'strncpy_from_user']);
+  assert.strictEqual(r.rows[0].site, 'el0_svc');
+  // Returns out of frames opened before the records start: depths move left, then are shifted back to 0.
+  const r2 = ft.recentCalls(ft.tailEvents({ records: [[hex(0x4050 | 2), hex(0x3014), 1, 1], [hex(0x3050 | 2), hex(0x2024), 2, 2], [hex(0x2010 | 1), hex(0x5000), 3, 3]] }), ft.namer(fns, 0n));
+  assert.deepStrictEqual(r2.rows.map((x) => [x.kind, x.depth]), [['ret', 1], ['ret', 0], ['call', 0]]);
+  assert.deepStrictEqual(ft.recentCalls([], ft.namer()).rows, []);
+  // An exception right after a call: a "call" into the vector table opens no frame.
+  const withVec = ev.concat(ft.tailEvents({ records: [[hex(0x5010 | 1), '0xfffffbfffdbf7480', 15, 180]] }));
+  const r3 = ft.recentCalls(withVec, ft.namer(fns, 0n), { vectors: [0xfffffbfffdbf7480n] });
+  assert.deepStrictEqual(r3.rows[r3.rows.length - 1].kind, 'exception');
+  assert.deepStrictEqual(r3.open, ['do_sys_open', 'getname', 'strncpy_from_user']);
+  assert.strictEqual(ft.recentCalls(withVec, ft.namer(fns, 0n)).open.length, 4);
+});

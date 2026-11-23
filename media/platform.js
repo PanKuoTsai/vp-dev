@@ -109,7 +109,7 @@ document.addEventListener('pointerout',e=>{const el=e.target.closest&&e.target.c
 document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('[data-route-region]');if(el)previewRoute(el);});
 document.addEventListener('focusout',e=>{const el=e.target.closest&&e.target.closest('[data-route-region]');if(el)restoreRoute();});
 // The Transactions tab: the running simulation's accesses, polled by the extension while the tab is open.
-const TX={all:[],frozen:null,follow:true,state:null,watching:false,pinned:0};
+const TX={all:[],frozen:null,follow:true,state:null,watching:false,pinned:0,mark:{from:0,to:0}};
 const TXKEEP=5000,TXSHOW=400;
 const txModule=point=>{const i=point.lastIndexOf('.');return i<0?point:point.slice(0,i);};
 const txIniBase=name=>{const i=name.lastIndexOf('.');const n=i<0?name:name.slice(0,i);const hit=ROUTES.inst[n];return hit?hit[0]:n;};
@@ -133,7 +133,7 @@ function txDraw(arrived){const body=document.querySelector('.tx-rows');if(!body)
   rows.reverse();
   document.querySelector('.tx-shown').textContent=src.length?(rows.length===TXSHOW?'newest '+TXSHOW+' shown':rows.length+' shown')+' of '+src.length+(TX.frozen?' · Follow off':''):'';
   body.textContent='';const frag=document.createDocumentFragment();
-  for(const r of rows){const tr=document.createElement('tr');tr.dataset.seq=r.seq;tr.className=(r.status!=='OK'&&r.dir!=='S'?'err ':'')+(r.dir!=='S'?'tx-row routable':'')+(r.seq===TX.pinned?' pinned':'');
+  for(const r of rows){const tr=document.createElement('tr');tr.dataset.seq=r.seq;const since=r.seq>TX.mark.from&&r.seq<=TX.mark.to;tr.className=(r.status!=='OK'&&r.dir!=='S'?'err ':'')+(r.dir!=='S'?'tx-row routable':'')+(r.seq===TX.pinned?' pinned':'')+(since?' since':'');
     if(r.dir!=='S'){tr.tabIndex=0;tr.title='Hover to see the route, click to keep it';}
     const cell=(t,c)=>{const td=document.createElement('td');if(c)td.className=c;td.textContent=t;tr.append(td);return td;};
     cell(Number(r.time).toFixed(9),'num');cell(r.dir==='S'?'':r.initiator||'–','ini');cell(r.point,'');
@@ -145,13 +145,14 @@ let txPending=false,txArrived=false;const txSchedule=(arrived)=>{txArrived=txArr
 const txRecord=tr=>{const seq=Number(tr.dataset.seq);const src=TX.frozen||TX.all;for(let i=src.length-1;i>=0;i--)if(src[i].seq===seq)return src[i];return null;};
 document.addEventListener('pointerover',e=>{const tr=e.target.closest&&e.target.closest('tr.tx-row');if(tr){const r=txRecord(tr);if(r)drawRoute(txSpec(r));}});
 document.addEventListener('pointerout',e=>{const tr=e.target.closest&&e.target.closest('tr.tx-row');if(tr&&!(e.relatedTarget&&tr.contains(e.relatedTarget)))restoreRoute();});
-function txPin(tr){const r=txRecord(tr);if(!r)return;if(TX.pinned===r.seq)pinRoute(null);else{pinRoute(txSpec(r));TX.pinned=r.seq;tr.classList.add('pinned');}}
+function txPin(tr){const r=txRecord(tr);if(!r)return;if(TX.pinned===r.seq)pinRoute(null);else{pinRoute(txSpec(r));TX.pinned=r.seq;tr.classList.add('pinned');post({type:'txRegister',address:r.address});}}
 document.addEventListener('click',e=>{const tr=e.target.closest&&e.target.closest('tr.tx-row');if(tr){txPin(tr);return;}
   if(e.target.closest&&e.target.closest('.tx-follow')){TX.follow=!TX.follow;TX.frozen=TX.follow?null:TX.all.slice();e.target.closest('.tx-follow').setAttribute('aria-pressed',String(TX.follow));txDraw(TX.follow);}});
 document.addEventListener('keydown',e=>{const tr=e.target.closest&&e.target.closest('tr.tx-row');if(tr&&(e.key==='Enter'||e.key===' ')){e.preventDefault();e.stopPropagation();txPin(tr);}},true);
 document.addEventListener('change',e=>{if(e.target.matches('.tx-sel,.tx-dir')){S.tx={sel:document.querySelector('.tx-sel').checked,dir:document.querySelector('.tx-dir').value};save();txDraw();}});
 window.addEventListener('message',ev=>{const m=ev.data;if(!m)return;
   if(m.type==='txState'){TX.state=m;txSchedule();}
+  else if(m.type==='stopMark'){TX.mark={from:Number(m.from)||0,to:Number(m.to)||0};txSchedule();}
   else if(m.type==='tx'){if(m.reset){TX.all=[];TX.frozen=TX.follow?null:[];}TX.all.push(...(m.records||[]));if(TX.all.length>TXKEEP)TX.all=TX.all.slice(TX.all.length-TXKEEP);txSchedule(true);}});
 const REGIONS=JSON.parse((document.getElementById('vp-regions')||{textContent:'[]'}).textContent).map(r=>Object.assign(r,{start:BigInt(r.start),end:BigInt(r.end)}));
 function findAddress(text){const out=document.querySelector('.addr-result');if(!out)return;out.textContent='';

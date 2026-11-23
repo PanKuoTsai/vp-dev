@@ -1,0 +1,35 @@
+html,body{height:100%}
+.app{display:grid;grid-template-rows:auto auto minmax(0,1fr);height:100vh}
+.content{padding:12px 20px 24px;display:flex;flex-direction:column;gap:10px;overflow:auto;min-height:0}
+.cpus{display:flex;flex-wrap:wrap;gap:6px}
+.cpu-chip{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;border:1px solid var(--vp-border);border-radius:5px;padding:3px 8px;background:var(--vp-panel)}
+.cpu-chip .aff{font-family:var(--vp-mono);color:var(--vp-muted)}
+.cpu-chip.asleep{border-color:var(--vscode-errorForeground);color:var(--vscode-errorForeground)}
+.filters{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.field{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--vp-muted)}.field select{height:28px;font-family:inherit}
+#q{height:28px;min-width:180px}
+#count{font-size:12px}
+button.toggle-soft[aria-pressed=true]{background:color-mix(in srgb,var(--vp-accent) 22%,var(--vp-panel));border-color:color-mix(in srgb,var(--vp-accent) 70%,transparent)}
+button.toggle-soft[aria-pressed=true] .ico{color:var(--vp-accent)}
+table.irq{font-size:12px}
+table.irq th{position:sticky;top:0;background:var(--vp-bg);z-index:1;padding-top:6px}
+table.irq td{padding:3px 12px 3px 0;vertical-align:top}
+td.id,td.pr{font-family:var(--vp-mono);text-align:right}
+td.src{font-family:var(--vp-mono);font-size:11.5px}
+td.src .more{color:var(--vp-muted)}
+td.notes{min-width:220px}
+.flag{display:inline-block;font-family:var(--vp-mono);font-size:10.5px;width:18px;text-align:center;border-radius:3px;margin-right:2px;border:1px solid var(--vp-border);color:var(--vp-muted)}
+.flag.on.e{color:var(--vp-accent);border-color:var(--vp-accent)}
+.flag.on.p{color:var(--vp-memory);border-color:var(--vp-memory);font-weight:600}
+.flag.on.a{color:var(--vp-irq);border-color:var(--vp-irq);font-weight:600}
+.note{display:block;line-height:1.4}
+.note.error{color:var(--vscode-errorForeground)}
+.note.warning{color:var(--vscode-editorWarning-foreground)}
+.note.info{color:var(--vp-muted)}
+.kind{color:var(--vp-muted)}
+tbody tr:hover td{background:var(--vscode-list-hoverBackground)}
+#rows tr{cursor:pointer}
+.empty{padding:24px 0;text-align:center}
+.stat-value.bad{color:var(--vscode-errorForeground)}
+@media (max-width:760px){.stats{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}.stat{padding:7px 12px}.stat-value{font-size:14px}.stat-sub{display:none}.head{padding:10px 14px}.desc{display:none}
+  .content{padding:10px 12px}}

@@ -49,6 +49,7 @@
 #include <rapidjson/filereadstream.h>
 #include <rapidjson/prettywriter.h>
 
+#include <cinttypes>
 #include <arpa/inet.h>
 #include <dlfcn.h>
 #include <sys/stat.h>
@@ -83,7 +84,7 @@ namespace json = vp_rapidjson;
 namespace {
 
 const char* const AGENT_NAME = "sim-agent";
-const char* const AGENT_VERSION = "0.14.0";
+const char* const AGENT_VERSION = "0.16.0";
 const int PROTOCOL_VERSION = 1;
 const size_t MAX_LINE = 1 << 20; // a request longer than this closes the connection
 
@@ -390,6 +391,22 @@ struct FTracer {
         }
         return { unsigned(out.size()), events };
     }
+
+    /** The newest `count` records of one vCPU, oldest first; total = records written since the last clear. */
+    std::vector<Rec> tail(unsigned cpu, size_t count, uint64_t& total)
+    {
+        std::vector<Rec> v;
+        total = 0;
+        if (cpu >= MAX_CPUS) return v;
+        Cpu& c = cpus[cpu];
+        std::lock_guard<std::mutex> l(c.mu);
+        total = c.total;
+        if (!c.total || c.ring.empty()) return v;
+        const uint64_t n = std::min<uint64_t>({ uint64_t(count), c.total, uint64_t(c.ring.size()) });
+        v.reserve(n);
+        for (uint64_t k = c.total - n; k < c.total; k++) v.push_back(c.ring[k % c.ring.size()]);
+        return v;
+    }
 };
 
 void Profiler::on_tb_trans(qemu_plugin_tb* tb, void*)
@@ -410,6 +427,225 @@ void Profiler::on_tb_trans(qemu_plugin_tb* tb, void*)
 
 
 
+/**
+ * Exceptions and interrupts (exc.*). QEMU's discontinuity callback runs on the
+ * vCPU thread (with the BQL) right after the vCPU has taken an exception or an
+ * interrupt and before the first instruction of the handler: ESR, FAR, ELR and
+ * SPSR of the target EL already hold the new values and the PC is the vector.
+ * The vector's offset from VBAR gives the kind (synchronous, IRQ, FIQ, SError)
+ * and where it came from. The newest `capacity` events are kept and every kind
+ * is counted. A matching catch rule halts that vCPU right there (cpu_halt, so
+ * it stops on the vector) and asks the server thread to pause the rest, the
+ * way a bus breakpoint does. Works for any guest software; AArch64 only.
+ */
+// QBox puts a forward-declaration-only glib.h first on the include path; these
+// mirror glib's public layouts of GArray and GByteArray (stable since glib 2.0).
+struct GArrayView { char* data; unsigned len; };
+struct GByteArrayView { uint8_t* data; unsigned len; };
+
+struct Catcher {
+    static constexpr unsigned MAX_CPUS = 256;
+    struct Event {
+        uint64_t seq;
+        int64_t vtime_ns; // QEMU virtual clock
+        uint32_t cpu;
+        uint8_t type;     // 1 interrupt, 2 exception (QEMU's discontinuity type)
+        uint8_t vec;      // vector slot 0..15 (offset / 0x80), 255 when VBAR did not match
+        uint8_t el_from, el_to;
+        uint64_t from_pc, to_pc, esr, far, elr;
+        uint64_t x8; // AArch64 SVC: the system call number (Linux puts it in x8)
+    };
+    struct Rule {
+        int kind;    // 0 sync, 1 irq, 2 fiq, 3 serror, -1 any
+        int ec;      // exception class (ESR bits 31:26) for sync, -1 any
+        int el_from; // -1 any
+        std::vector<uint64_t> syscalls; // non-empty: only SVCs (EC 0x15) with x8 in this list
+    };
+    struct Regs {
+        bool looked = false;
+        qemu_plugin_register* cpsr = nullptr;
+        qemu_plugin_register* x8 = nullptr;
+        qemu_plugin_register *esr[4] = {}, *far[4] = {}, *elr[4] = {}, *spsr[4] = {}, *vbar[4] = {};
+        GByteArray* buf = nullptr;
+    };
+    std::atomic<bool> alive{ true };
+    std::atomic<bool> active{ false };
+    std::atomic<bool> recording{ true };
+    const LibQemuExports* api = nullptr;
+    qemu::LibQemu* qemu = nullptr;
+    std::function<void()> on_hit; // set once before the callback is registered
+    GByteArray* (*byte_array_new)() = nullptr;
+
+    std::mutex mu; // everything below
+    std::vector<Event> ring;
+    size_t capacity = 4096;
+    uint64_t total = 0;      // events recorded since the last clear
+    std::map<uint32_t, uint64_t> counts; // kind << 8 | ec (ec 0 for interrupts)
+    std::vector<Rule> rules;
+    bool hit_valid = false;
+    Event hit{};
+    uint64_t hits = 0;
+    Regs regs[MAX_CPUS];
+
+    static Catcher& get()
+    {
+        static Catcher* c = new Catcher(); // leaked: callbacks may outlive the agent
+        return *c;
+    }
+
+    static int kind_of(const Event& e)
+    {
+        if (e.vec < 16) return e.vec & 3;
+        return e.type == QEMU_PLUGIN_DISCON_INTERRUPT ? 1 : 0;
+    }
+    static int ec_of(const Event& e) { return kind_of(e) == 0 ? int((e.esr >> 26) & 0x3f) : 0; }
+
+    void look_up(Regs& r)
+    {
+        r.looked = true;
+        auto* all = reinterpret_cast<GArrayView*>(api->qemu_plugin_get_registers());
+        if (!all) return;
+        for (unsigned i = 0; i < all->len; i++) {
+            auto& d = reinterpret_cast<qemu_plugin_reg_descriptor*>(all->data)[i];
+            if (!d.name) continue;
+            const std::string n = d.name;
+            if (n == "cpsr") r.cpsr = d.handle;
+            else if (n == "x8") r.x8 = d.handle;
+            for (int el = 1; el <= 3; el++) {
+                const std::string s = "_EL" + std::to_string(el);
+                if (n == "ESR" + s) r.esr[el] = d.handle;
+                else if (n == "FAR" + s) r.far[el] = d.handle;
+                else if (n == "ELR" + s) r.elr[el] = d.handle;
+                else if (n == "SPSR" + s) r.spsr[el] = d.handle;
+                else if (n == "VBAR" + s) r.vbar[el] = d.handle;
+            }
+        }
+        // The array is left allocated: freeing it needs glib's allocator (once per vCPU).
+        if (byte_array_new) r.buf = byte_array_new();
+    }
+
+    uint64_t read(Regs& r, qemu_plugin_register* h)
+    {
+        if (!h || !r.buf) return 0;
+        auto* b = reinterpret_cast<GByteArrayView*>(r.buf);
+        b->len = 0;
+        if (!api->qemu_plugin_read_register(h, r.buf) || b->len == 0) return 0;
+        uint64_t v = 0;
+        std::memcpy(&v, b->data, std::min<size_t>(sizeof v, b->len));
+        return v;
+    }
+
+    bool matches(const Event& e) const
+    {
+        const int k = kind_of(e), ec = ec_of(e);
+        for (const Rule& r : rules) {
+            if (r.kind >= 0 && r.kind != k) continue;
+            if (r.ec >= 0 && (k != 0 || r.ec != ec)) continue;
+            if (r.el_from >= 0 && r.el_from != e.el_from) continue;
+            if (!r.syscalls.empty() && (k != 0 || ec != 0x15 || std::find(r.syscalls.begin(), r.syscalls.end(), e.x8) == r.syscalls.end())) continue;
+            return true;
+        }
+        return false;
+    }
+
+    static void on_discon(unsigned int cpu, qemu_plugin_discon_type type, uint64_t from, uint64_t to, void*)
+    {
+        Catcher& c = get();
+        if (!c.alive.load(std::memory_order_relaxed) || cpu >= MAX_CPUS) return;
+        if (!c.recording.load(std::memory_order_relaxed) && !c.has_rules.load(std::memory_order_relaxed)) return;
+        Regs& r = c.regs[cpu];
+        if (!r.looked) c.look_up(r);
+        Event e{};
+        e.cpu = cpu;
+        e.type = uint8_t(type);
+        e.from_pc = from;
+        e.to_pc = to;
+        const uint64_t cpsr = c.read(r, r.cpsr);
+        int el = int((cpsr >> 2) & 3);
+        if (el < 1) el = 1; // exceptions are never taken to EL0
+        e.el_to = uint8_t(el);
+        const uint64_t vbar = c.read(r, r.vbar[el]);
+        e.vec = 255;
+        if (r.vbar[el] && to >= vbar && to - vbar < 0x800 && ((to - vbar) & 0x7f) == 0) e.vec = uint8_t((to - vbar) >> 7);
+        const uint64_t spsr = c.read(r, r.spsr[el]);
+        e.el_from = (spsr & 0x10) ? 0 : uint8_t((spsr >> 2) & 3); // AArch32 state: from EL0
+        // ESR and FAR mean something for synchronous exceptions and SError only; an
+        // interrupt's return address is where it struck. Fewer register reads per IRQ.
+        const int kind = kind_of(e);
+        if (kind == 0 || kind == 3) {
+            e.esr = c.read(r, r.esr[el]);
+            e.far = kind == 0 ? c.read(r, r.far[el]) : 0;
+            e.elr = c.read(r, r.elr[el]);
+            if (kind == 0 && ((e.esr >> 26) & 0x3f) == 0x15) e.x8 = c.read(r, r.x8);
+        } else {
+            e.elr = from;
+        }
+        e.vtime_ns = c.qemu ? c.qemu->get_virtual_clock() : 0;
+        bool stop = false;
+        {
+            std::lock_guard<std::mutex> l(c.mu);
+            if (c.recording.load(std::memory_order_relaxed)) {
+                e.seq = ++c.total;
+                if (c.ring.size() < c.capacity) c.ring.push_back(e);
+                else c.ring[(e.seq - 1) % c.capacity] = e;
+                c.counts[uint32_t(kind_of(e)) << 8 | uint32_t(ec_of(e))]++;
+            }
+            if (!c.hit_valid && c.matches(e)) {
+                c.hit_valid = true;
+                c.hit = e;
+                c.hits++;
+                stop = true;
+            }
+        }
+        if (stop) {
+            // Stop this vCPU on the vector now; the server thread pauses the others.
+            if (c.api->cpu_halt && c.api->current_cpu_get) c.api->cpu_halt(c.api->current_cpu_get(), true);
+            if (c.on_hit) c.on_hit();
+        }
+    }
+
+    std::atomic<bool> has_rules{ false };
+
+    void clear()
+    {
+        std::lock_guard<std::mutex> l(mu);
+        ring.clear();
+        total = 0;
+        counts.clear();
+    }
+
+    void clear_hit()
+    {
+        std::lock_guard<std::mutex> l(mu);
+        hit_valid = false;
+    }
+
+    static void write_event(Writer& w, const Event& e)
+    {
+        auto hx = [&](uint64_t v) {
+            char b[19];
+            std::snprintf(b, sizeof b, "0x%llx", (unsigned long long)v);
+            w.String(b);
+        };
+        // [seq, vtime_ns, cpu, type, vec, elFrom, elTo, fromPc, toPc, esr, far, elr, x8]
+        w.StartArray();
+        w.Uint64(e.seq);
+        w.Int64(e.vtime_ns);
+        w.Uint(e.cpu);
+        w.Uint(e.type);
+        w.Uint(e.vec);
+        w.Uint(e.el_from);
+        w.Uint(e.el_to);
+        hx(e.from_pc);
+        hx(e.to_pc);
+        hx(e.esr);
+        hx(e.far);
+        hx(e.elr);
+        hx(e.x8);
+        w.EndArray();
+    }
+};
+
 class sim_agent : public sc_core::sc_module
 {
     SCP_LOGGER();
@@ -422,8 +658,11 @@ public:
     cci::cci_param<bool> p_profile;
     cci::cci_param<uint64_t> p_profile_period;
     cci::cci_param<uint64_t> p_profile_id;
+    cci::cci_param<std::string> p_plugin_qemu;
     cci::cci_param<bool> p_ftrace;
     cci::cci_param<uint64_t> p_ftrace_buffer;
+    cci::cci_param<bool> p_exceptions;
+    cci::cci_param<uint64_t> p_exceptions_buffer;
     cci::cci_param<std::string> p_restore_from;
     cci::cci_param<bool> p_restore_paused;
     // One initiator per bus (router) for mem.read / mem.write: bus_0, bus_1, ...
@@ -439,9 +678,14 @@ public:
         , p_profile("profile", false, "Sample the guest software's program counter (needs the libidlinker plugin, see profile_id)")
         , p_profile_period("profile_period", 10000, "Instructions per vCPU between two samples")
         , p_profile_id("profile_id", 0, "QEMU plugin id, written by libidlinker (-plugin libidlinker.so,key=<this parameter>)")
+        , p_plugin_qemu("plugin_qemu", "",
+                        "Name of the QEMU instance whose libidlinker plugin writes profile_id (the plugin id is only valid there); empty: the first one")
         , p_ftrace("ftrace", false,
                    "Instrument guest calls and returns for the function trace (ftrace.*; needs the libidlinker plugin, see profile_id)")
         , p_ftrace_buffer("ftrace_buffer", 262144, "Function trace records kept per vCPU (32 bytes each; the newest are kept)")
+        , p_exceptions("exceptions", false,
+                       "Record the exceptions and interrupts the vCPUs take, and stop on the ones asked for (exc.*; needs the libidlinker plugin, see profile_id)")
+        , p_exceptions_buffer("exceptions_buffer", 4096, "Exception and interrupt events kept (the newest)")
         , p_restore_from("restore_from", "", "Checkpoint folder (ckpt.save) to load right after the simulation starts")
         , p_restore_paused("restore_paused", false, "Stay paused after restoring a checkpoint")
         , bus("bus")
@@ -585,6 +829,7 @@ private:
     bool m_watch_clock = false;
     bool m_clock_seen_running = false;
     int64_t m_last_clock = -1;
+    int64_t m_paused_clock = -1; // virtual clock when our own pause took hold
     std::chrono::steady_clock::time_point m_last_change;
     static constexpr auto HALT_AFTER = std::chrono::milliseconds(150);
 
@@ -595,8 +840,24 @@ private:
         const auto host = std::chrono::steady_clock::now();
         if (m_paused.load()) { // our own pause froze it; start over afterwards
             m_last_clock = -1;
+            // A debugger attached to the gdbstub sees our pause as a stop and may
+            // continue the VM itself: then the simulation is running again, and
+            // SystemC must not stay suspended under running vCPUs.
+            if (m_vm_ours) {
+                const int64_t now = m_qemu[0]->get().get_virtual_clock();
+                if (m_paused_clock < 0) m_paused_clock = now;
+                else if (now != m_paused_clock) {
+                    m_paused_clock = -1;
+                    std::string result;
+                    try {
+                        if (set_paused(false, "resumed", result)) broadcasts.push_back(notification("sim.stateChanged", result));
+                    } catch (const rpc_error&) {
+                    }
+                }
+            }
             return;
         }
+        m_paused_clock = -1;
         const int64_t now = m_qemu[0]->get().get_virtual_clock();
         if (m_last_clock < 0) { // a new baseline (first sample, or after our own pause): not a change
             m_last_clock = now;
@@ -654,6 +915,16 @@ private:
     sc_core::sc_time m_last_requested;      // SystemC thread only: the stop that fired last
     std::atomic<bool> m_deadline_hit{ false };
     std::atomic<bool> m_break_hit{ false }; // a bus breakpoint matched (set from any thread)
+    std::atomic<bool> m_exc_hit{ false };   // a catch rule matched (set on a vCPU thread)
+
+    void on_exception()
+    {
+        m_exc_hit = true;
+        if (m_wake[1] >= 0) {
+            char c = 'e';
+            (void)!::write(m_wake[1], &c, 1);
+        }
+    }
 
     /** From a tracer, on whatever thread made the access: ask the server thread to pause. */
     void on_break()
@@ -709,6 +980,7 @@ private:
                 if (pause) disarm_deadline();
                 // Running again: the next matching access is a new breakpoint hit.
                 if (!pause) TraceStore::get().clear_hit();
+                if (!pause) Catcher::get().clear_hit();
                 apply_suspend();
                 write_status(w, reason);
             },
@@ -722,11 +994,12 @@ private:
     void handle_deadline(std::vector<std::string>& broadcasts)
     {
         const bool brk = m_break_hit.exchange(false);
+        const bool exc = m_exc_hit.exchange(false);
         const bool time = m_deadline_hit.exchange(false);
-        if (!brk && !time) return;
+        if (!brk && !exc && !time) return;
         std::string result;
         try {
-            if (set_paused(true, brk ? "breakpoint" : "time", result))
+            if (set_paused(true, exc ? "exception" : brk ? "breakpoint" : "time", result))
                 broadcasts.push_back(notification("sim.stateChanged", result));
         } catch (const rpc_error&) {
             // The simulation ended meanwhile: nothing to pause.
@@ -922,6 +1195,14 @@ private:
             w.Key("matchesAfter"); // of those, accesses that matched too (they will not stop it)
             w.Uint64(hit.matches_after);
             w.EndObject();
+        }
+        {
+            Catcher& c = Catcher::get();
+            std::lock_guard<std::mutex> l(c.mu);
+            if (c.hit_valid) { // stays until the simulation runs again
+                w.Key("exceptionHit");
+                Catcher::write_event(w, c.hit);
+            }
         }
         if (!p_restore_from.get_value().empty()) {
             std::lock_guard<std::mutex> g(m_restore_mu);
@@ -1481,7 +1762,8 @@ private:
                                    "cci.getParam", "cci.setParam", "trace.getStatus", "trace.setEnabled", "trace.setPoints", "trace.read", "trace.clear",
                                    "break.set", "break.list", "break.clear", "mem.read", "mem.write",
                                    "profile.getStatus", "profile.setEnabled", "profile.reset", "profile.read", "ftrace.getStatus",
-                                   "ftrace.setEnabled", "ftrace.clear", "ftrace.save", "ckpt.save" })
+                                   "ftrace.setEnabled", "ftrace.clear", "ftrace.save", "ftrace.tail", "ckpt.save", "exc.getStatus",
+                                   "exc.setRecording", "exc.clear", "exc.read", "exc.setCatch" })
                 w.String(m);
             w.EndArray();
             w.EndObject();
@@ -1726,34 +2008,46 @@ private:
                 if (size < 1 || size > 4096) throw rpc_error{ E_PARAMS, "\"size\" must be 1 to 4096" };
                 data.resize(size);
             }
-            return on_sim([this, write, address, busi, data](Writer& w) mutable {
-                tlm::tlm_generic_payload t;
-                t.set_command(write ? tlm::TLM_WRITE_COMMAND : tlm::TLM_READ_COMMAND);
-                t.set_address(address);
-                t.set_data_ptr(data.data());
-                t.set_data_length(unsigned(data.size()));
-                t.set_streaming_width(unsigned(data.size()));
-                t.set_byte_enable_ptr(nullptr);
-                t.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
+            // width (0.15.0): split into accesses of this many bytes, as registers
+            // want (QEMU's GIC answers 4 and 8 byte accesses only); 0 = one access.
+            uint64_t width = 0;
+            if (r.params->HasMember("width")) {
+                width = u64_of((*r.params)["width"], "\"width\"");
+                if (width != 0 && width != 1 && width != 2 && width != 4 && width != 8)
+                    throw rpc_error{ E_PARAMS, "\"width\" must be 1, 2, 4 or 8" };
+                if (width && data.size() % width) throw rpc_error{ E_PARAMS, "the size must be a multiple of \"width\"" };
+            }
+            return on_sim([this, write, address, busi, data, width](Writer& w) mutable {
                 struct Mark { // the tracers ignore the agent's own accesses
                     Mark() { TraceStore::agent_access() = true; }
                     ~Mark() { TraceStore::agent_access() = false; }
                 } mark;
-                unsigned n = bus[busi]->transport_dbg(t);
                 bool normal = false;
-                if (n == 0 && t.get_response_status() == tlm::TLM_INCOMPLETE_RESPONSE) {
-                    // The target has no debug transport (QBox's SystemC Pl011, for
-                    // one): make a normal access instead, with no delay. It runs on
-                    // this SystemC thread, so it is as safe as any model's access.
-                    sc_core::sc_time delay = sc_core::SC_ZERO_TIME;
+                const size_t step = width ? size_t(width) : data.size();
+                for (size_t off = 0; off < data.size(); off += step) {
+                    tlm::tlm_generic_payload t;
+                    t.set_command(write ? tlm::TLM_WRITE_COMMAND : tlm::TLM_READ_COMMAND);
+                    t.set_address(address + off);
+                    t.set_data_ptr(data.data() + off);
+                    t.set_data_length(unsigned(step));
+                    t.set_streaming_width(unsigned(step));
+                    t.set_byte_enable_ptr(nullptr);
                     t.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
-                    bus[busi]->b_transport(t, delay);
-                    normal = true;
-                    n = t.get_response_status() == tlm::TLM_OK_RESPONSE ? unsigned(data.size()) : 0;
+                    unsigned n = bus[busi]->transport_dbg(t);
+                    if (n == 0 && t.get_response_status() == tlm::TLM_INCOMPLETE_RESPONSE) {
+                        // The target has no debug transport (QBox's SystemC Pl011, for
+                        // one): make a normal access instead, with no delay. It runs on
+                        // this SystemC thread, so it is as safe as any model's access.
+                        sc_core::sc_time delay = sc_core::SC_ZERO_TIME;
+                        t.set_response_status(tlm::TLM_INCOMPLETE_RESPONSE);
+                        bus[busi]->b_transport(t, delay);
+                        normal = true;
+                        n = t.get_response_status() == tlm::TLM_OK_RESPONSE ? unsigned(step) : 0;
+                    }
+                    if (t.get_response_status() != tlm::TLM_OK_RESPONSE || n == 0)
+                        throw rpc_error{ E_REJECTED, "the bus did not complete the access at " + hex(address + off) + " (" +
+                                                         t.get_response_string() + ")" };
                 }
-                if (t.get_response_status() != tlm::TLM_OK_RESPONSE || n == 0)
-                    throw rpc_error{ E_REJECTED, "the bus did not complete the access at " + hex(address) + " (" +
-                                                     t.get_response_string() + ")" };
                 static const char* hexd = "0123456789abcdef";
                 std::string out;
                 for (size_t i = 0; i < data.size(); i++) {
@@ -1766,11 +2060,189 @@ private:
                 w.Key("data");
                 w.String(out);
                 w.Key("length");
-                w.Uint(n);
+                w.Uint(unsigned(data.size()));
                 w.Key("via"); // "debug": debug transport; "b_transport": the target has none
                 w.String(normal ? "b_transport" : "debug");
                 w.EndObject();
             });
+        }
+
+        if (r.method == "exc.getStatus" || r.method == "exc.setRecording" || r.method == "exc.clear" ||
+            r.method == "exc.read" || r.method == "exc.setCatch") {
+            Catcher& c = Catcher::get();
+            if (r.method != "exc.getStatus" && !c.active)
+                throw rpc_error{ E_STATE, m_exc_problem.empty() ? "the simulation was not started with exception recording (exceptions)"
+                                                                : m_exc_problem };
+            if (r.method == "exc.setRecording") {
+                if (!(r.params && r.params->HasMember("recording") && (*r.params)["recording"].IsBool()))
+                    throw rpc_error{ E_PARAMS, "\"recording\" must be a boolean" };
+                c.recording = (*r.params)["recording"].GetBool();
+            }
+            if (r.method == "exc.clear") c.clear();
+            if (r.method == "exc.setCatch") {
+                if (!(r.params && r.params->HasMember("rules") && (*r.params)["rules"].IsArray()))
+                    throw rpc_error{ E_PARAMS, "\"rules\" must be an array" };
+                std::vector<Catcher::Rule> rules;
+                for (const auto& v : (*r.params)["rules"].GetArray()) {
+                    if (!v.IsObject()) throw rpc_error{ E_PARAMS, "each rule must be an object" };
+                    Catcher::Rule rule{ -1, -1, -1 };
+                    if (v.HasMember("kind")) {
+                        const std::string k = v["kind"].IsString() ? v["kind"].GetString() : "";
+                        if (k == "sync") rule.kind = 0;
+                        else if (k == "irq") rule.kind = 1;
+                        else if (k == "fiq") rule.kind = 2;
+                        else if (k == "serror") rule.kind = 3;
+                        else if (k != "any") throw rpc_error{ E_PARAMS, "\"kind\" must be sync, irq, fiq, serror or any" };
+                    }
+                    if (v.HasMember("ec")) {
+                        if (!v["ec"].IsInt() || v["ec"].GetInt() < 0 || v["ec"].GetInt() > 63)
+                            throw rpc_error{ E_PARAMS, "\"ec\" must be 0..63" };
+                        rule.ec = v["ec"].GetInt();
+                    }
+                    if (v.HasMember("fromEl")) {
+                        if (!v["fromEl"].IsInt() || v["fromEl"].GetInt() < 0 || v["fromEl"].GetInt() > 3)
+                            throw rpc_error{ E_PARAMS, "\"fromEl\" must be 0..3" };
+                        rule.el_from = v["fromEl"].GetInt();
+                    }
+                    if (v.HasMember("syscalls")) {
+                        if (!v["syscalls"].IsArray()) throw rpc_error{ E_PARAMS, "\"syscalls\" must be an array of numbers" };
+                        for (const auto& n : v["syscalls"].GetArray()) {
+                            if (!n.IsUint64()) throw rpc_error{ E_PARAMS, "\"syscalls\" must be an array of numbers" };
+                            rule.syscalls.push_back(n.GetUint64());
+                        }
+                    }
+                    rules.push_back(rule);
+                }
+                std::lock_guard<std::mutex> l(c.mu);
+                c.rules = rules;
+                c.has_rules = !rules.empty();
+            }
+            json::StringBuffer sb;
+            Writer w(sb);
+            w.StartObject();
+            std::lock_guard<std::mutex> l(c.mu);
+            if (r.method == "exc.read") {
+                uint64_t after = 0;
+                unsigned max = 2000;
+                if (r.params && r.params->HasMember("after") && (*r.params)["after"].IsUint64()) after = (*r.params)["after"].GetUint64();
+                if (r.params && r.params->HasMember("max") && (*r.params)["max"].IsUint()) max = std::min(10000u, (*r.params)["max"].GetUint());
+                const uint64_t first = c.total > c.ring.size() ? c.total - c.ring.size() + 1 : 1;
+                uint64_t from = std::max(after + 1, first);
+                w.Key("dropped"); // events newer than `after` that are no longer kept
+                w.Uint64(from > after + 1 ? from - after - 1 : 0);
+                w.Key("events");
+                w.StartArray();
+                unsigned n = 0;
+                for (uint64_t s = from; s <= c.total && n < max; s++, n++) Catcher::write_event(w, c.ring[(s - 1) % c.capacity]);
+                w.EndArray();
+                w.Key("last");
+                w.Uint64(from + n - 1 < from ? after : from + n - 1);
+                w.EndObject();
+                return std::string(sb.GetString(), sb.GetSize());
+            }
+            w.Key("active");
+            w.Bool(c.active.load());
+            if (!m_exc_problem.empty()) {
+                w.Key("problem");
+                w.String(m_exc_problem);
+            }
+            w.Key("recording");
+            w.Bool(c.recording.load());
+            w.Key("capacity");
+            w.Uint64(c.capacity);
+            w.Key("total");
+            w.Uint64(c.total);
+            w.Key("hits");
+            w.Uint64(c.hits);
+            w.Key("counts");
+            w.StartArray();
+            static const char* kinds[] = { "sync", "irq", "fiq", "serror" };
+            for (const auto& kv : c.counts) {
+                w.StartObject();
+                w.Key("kind");
+                w.String(kinds[(kv.first >> 8) & 3]);
+                if (((kv.first >> 8) & 3) == 0) {
+                    w.Key("ec");
+                    w.Uint(kv.first & 0xff);
+                }
+                w.Key("count");
+                w.Uint64(kv.second);
+                w.EndObject();
+            }
+            w.EndArray();
+            w.Key("rules");
+            w.StartArray();
+            for (const auto& rule : c.rules) {
+                w.StartObject();
+                w.Key("kind");
+                w.String(rule.kind < 0 ? "any" : kinds[rule.kind]);
+                if (rule.ec >= 0) {
+                    w.Key("ec");
+                    w.Int(rule.ec);
+                }
+                if (rule.el_from >= 0) {
+                    w.Key("fromEl");
+                    w.Int(rule.el_from);
+                }
+                if (!rule.syscalls.empty()) {
+                    w.Key("syscalls");
+                    w.StartArray();
+                    for (uint64_t n : rule.syscalls) w.Uint64(n);
+                    w.EndArray();
+                }
+                w.EndObject();
+            }
+            w.EndArray();
+            if (c.hit_valid) {
+                w.Key("hit");
+                Catcher::write_event(w, c.hit);
+            }
+            w.EndObject();
+            return std::string(sb.GetString(), sb.GetSize());
+        }
+
+        if (r.method == "ftrace.tail") {
+            FTracer& f = FTracer::get();
+            if (!f.active)
+                throw rpc_error{ E_STATE, m_profile_problem.empty() ? "the simulation was not started with the function trace (ftrace)"
+                                                                    : m_profile_problem };
+            if (!(r.params && r.params->HasMember("cpu") && (*r.params)["cpu"].IsUint()))
+                throw rpc_error{ E_PARAMS, "\"cpu\" must be a vCPU index" };
+            const unsigned cpu = (*r.params)["cpu"].GetUint();
+            size_t count = 64;
+            if (r.params->HasMember("count")) {
+                if (!(*r.params)["count"].IsUint() || (*r.params)["count"].GetUint() == 0 ||
+                    (*r.params)["count"].GetUint() > 4096)
+                    throw rpc_error{ E_PARAMS, "\"count\" must be 1 to 4096" };
+                count = (*r.params)["count"].GetUint();
+            }
+            uint64_t total = 0;
+            const auto recs = f.tail(cpu, count, total);
+            json::StringBuffer sb;
+            Writer w(sb);
+            w.StartObject();
+            w.Key("cpu");
+            w.Uint(cpu);
+            w.Key("total");
+            w.Uint64(total);
+            w.Key("enabled");
+            w.Bool(f.enabled.load());
+            w.Key("records"); // [from|kind, to, ns, insns]; addresses as hex strings
+            w.StartArray();
+            char buf[2][24];
+            for (const auto& x : recs) {
+                w.StartArray();
+                std::snprintf(buf[0], sizeof buf[0], "0x%" PRIx64, x.from);
+                std::snprintf(buf[1], sizeof buf[1], "0x%" PRIx64, x.to);
+                w.String(buf[0]);
+                w.String(buf[1]);
+                w.Uint64(x.ns);
+                w.Uint64(x.insns);
+                w.EndArray();
+            }
+            w.EndArray();
+            w.EndObject();
+            return std::string(sb.GetString(), sb.GetSize());
         }
 
         if (r.method == "ftrace.getStatus" || r.method == "ftrace.setEnabled" || r.method == "ftrace.clear" ||
@@ -2287,6 +2759,7 @@ private:
         InitiatorNames::get().build();
         m_watch_clock = p_watch_debugger.get_value() && !m_qemu.empty();
         start_profiler();
+        start_catcher();
         m_timestep_watch.agent = this;
         TraceStore::get().set_on_break([this] { on_break(); });
         sc_core::sc_register_stage_callback(m_timestep_watch, sc_core::SC_PRE_TIMESTEP);
@@ -2300,13 +2773,67 @@ private:
     }
 
     std::string m_profile_problem; // why profiling is off, when it was asked for
+    std::string m_exc_problem;     // why exception recording is off, when it was asked for
+
+    /** The QEMU instance the plugin id belongs to (plugin_qemu), or nullptr when it names none. */
+    QemuInstance* plugin_qemu()
+    {
+        if (m_qemu.empty()) return nullptr;
+        const std::string want = p_plugin_qemu.get_value();
+        if (want.empty()) return m_qemu[0];
+        for (auto* q : m_qemu) {
+            const std::string n = q->name();
+            if (n == want) return q;
+            if (n.size() > want.size() && n.compare(n.size() - want.size(), want.size(), want) == 0 &&
+                n[n.size() - want.size() - 1] == '.')
+                return q;
+        }
+        return nullptr;
+    }
+
+    void start_catcher()
+    {
+        if (!p_exceptions.get_value()) return;
+        Catcher& c = Catcher::get();
+        QemuInstance* qi = plugin_qemu();
+        if (!qi || !qi->is_inited()) {
+            m_exc_problem = qi || m_qemu.empty() ? "no QEMU instance" : "plugin_qemu names no QEMU instance: " + p_plugin_qemu.get_value();
+        } else if (p_profile_id.get_value() == 0) {
+            m_exc_problem = std::string("no plugin id: load libidlinker with key=") + p_profile_id.name();
+        } else if (p_exceptions_buffer.get_value() == 0) {
+            m_exc_problem = "exceptions_buffer must be greater than 0";
+        } else {
+            c.api = &qi->get().plugin_api();
+            c.qemu = &qi->get();
+            // glib is already loaded by libqemu (locally); its allocator makes the register buffers.
+            if (void* g = dlopen("libglib-2.0.so.0", RTLD_NOW | RTLD_NOLOAD))
+                c.byte_array_new = reinterpret_cast<GByteArray* (*)()>(dlsym(g, "g_byte_array_new"));
+            if (!c.api->qemu_plugin_register_vcpu_discon_cb || !c.api->qemu_plugin_read_register) {
+                m_exc_problem = "this libqemu has no discontinuity callbacks (QEMU 10 or later is needed)";
+            } else if (!c.byte_array_new) {
+                m_exc_problem = "glib (libglib-2.0.so.0) is not loaded";
+            } else {
+                c.capacity = size_t(p_exceptions_buffer.get_value());
+                c.ring.reserve(std::min<size_t>(c.capacity, 65536));
+                c.on_hit = [this] { on_exception(); };
+                c.active = true;
+                c.api->qemu_plugin_register_vcpu_discon_cb(
+                    p_profile_id.get_value(),
+                    qemu_plugin_discon_type(QEMU_PLUGIN_DISCON_INTERRUPT | QEMU_PLUGIN_DISCON_EXCEPTION), &Catcher::on_discon,
+                    nullptr);
+                if (m_qemu.size() > 1) m_exc_problem = std::string("only the CPUs of ") + qi->name() + " are recorded";
+            }
+        }
+        if (!m_exc_problem.empty()) std::fprintf(stderr, "sim-agent: exceptions: %s\n", m_exc_problem.c_str());
+    }
 
     void start_profiler()
     {
         if (!p_profile.get_value() && !p_ftrace.get_value()) return;
         Profiler& p = Profiler::get();
-        if (m_qemu.empty() || !m_qemu[0]->is_inited()) {
-            m_profile_problem = "no QEMU instance";
+        QemuInstance* qi = plugin_qemu();
+        if (!qi || !qi->is_inited()) {
+            m_profile_problem = qi || m_qemu.empty() ? "no QEMU instance" : "plugin_qemu names no QEMU instance: " + p_plugin_qemu.get_value();
         } else if (p_profile_id.get_value() == 0) {
             m_profile_problem = std::string("no plugin id: load libidlinker with key=") + p_profile_id.name();
         } else if (p_profile.get_value() && p_profile_period.get_value() == 0) {
@@ -2314,7 +2841,7 @@ private:
         } else if (p_ftrace.get_value() && p_ftrace_buffer.get_value() == 0) {
             m_profile_problem = "ftrace_buffer must be greater than 0";
         } else {
-            p.api = &m_qemu[0]->get().plugin_api();
+            p.api = &qi->get().plugin_api();
             if (p_profile.get_value()) {
                 p.period = p_profile_period.get_value();
                 auto* sb = p.api->qemu_plugin_scoreboard_new(sizeof(uint64_t));
@@ -2333,7 +2860,7 @@ private:
                 f.active = true;
             }
             p.api->qemu_plugin_register_vcpu_tb_trans_cb(p_profile_id.get_value(), &Profiler::on_tb_trans, nullptr);
-            if (m_qemu.size() > 1) m_profile_problem = "only the first QEMU instance is profiled or traced";
+            if (m_qemu.size() > 1) m_profile_problem = std::string("only the CPUs of ") + qi->name() + " are profiled or traced";
         }
         if (!m_profile_problem.empty())
             std::fprintf(stderr, "sim-agent: profiling: %s\n", m_profile_problem.c_str());
@@ -2343,6 +2870,7 @@ private:
     {
         Profiler::get().alive = false;
         FTracer::get().alive = false;
+        Catcher::get().alive = false;
         TraceStore::get().set_on_break(nullptr);
         if (m_watching_timesteps) sc_core::sc_unregister_stage_callback(m_timestep_watch, sc_core::SC_PRE_TIMESTEP);
         m_watching_timesteps = false;

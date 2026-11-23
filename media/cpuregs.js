@@ -5,6 +5,12 @@ const S = Object.assign({ open: {}, filter: {} }, (vscode && vscode.getState()) 
 const save = () => { if (vscode) vscode.setState(S); };
 let last = null;
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+const ADDR = (v) => { const s = String(v || '').trim(); return /^0x[0-9a-fA-F]+$/.test(s) && s.replace(/^0x0*/, '').length > 3; };
+function memBtn(r) {
+  const b = el('button', 'mem', 'mem'); b.title = `Show memory at ${r.value} (${r.name})`; b.setAttribute('aria-label', b.title);
+  b.addEventListener('click', (e) => { e.stopPropagation(); post({ type: 'memory', value: r.value }); });
+  return b;
+}
 function copy(text) { post({ type: 'copy', text }); const t = $('toast'); t.hidden = false; clearTimeout(copy.t); copy.t = setTimeout(() => { t.hidden = true; }, 900); }
 function fill(group) {
   const tb = $('t-' + group); tb.textContent = '';
@@ -17,6 +23,7 @@ function fill(group) {
     const tr = el('tr', r.changed ? 'changed' : '');
     tr.append(el('td', 'n', r.name));
     const v = el('td', 'val', r.value); v.title = 'Click to copy'; v.addEventListener('click', () => copy(r.value)); tr.append(v);
+    const mc = el('td', 'm'); if (group === 'general' && ADDR(r.value)) mc.append(memBtn(r)); tr.append(mc);
     tb.appendChild(tr);
   }
   $('n-' + group).textContent = String(list.length);
@@ -42,7 +49,20 @@ function draw(m) {
     const r = name ? by.get(name) : null;
     const box = el('div', 'key' + (r && r.changed ? ' changed' : ''));
     box.append(el('div', 'k', k), el('div', 'v', name ? (r ? r.value : '–') : (p ? p.mode : '–')));
-    if (r) { box.title = 'Click to copy'; box.addEventListener('click', () => copy(r.value)); }
+    if (r) {
+      box.title = 'Click to copy'; box.addEventListener('click', () => copy(r.value));
+      if (name === 'pc') {
+        const d = el('button', 'mem', 'dis'); d.title = 'Show disassembly at the PC'; d.setAttribute('aria-label', d.title);
+        d.addEventListener('click', (e) => { e.stopPropagation(); post({ type: 'disassembly' }); });
+        box.append(d);
+      }
+      if (ADDR(r.value)) {
+        box.append(memBtn(r));
+        const t = el('button', 'mem', 'pa'); t.title = `Translate ${r.value} (${r.name}) to a physical address`; t.setAttribute('aria-label', t.title);
+        t.addEventListener('click', (e) => { e.stopPropagation(); post({ type: 'translate', value: r.value }); });
+        box.append(t);
+      }
+    }
     keys.appendChild(box);
   }
   const fl = $('flags'); fl.textContent = '';

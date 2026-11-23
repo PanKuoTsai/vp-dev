@@ -74,7 +74,7 @@ connected at once.
 | `break.set` | `breakpoints`: array of Breakpoint | `{breakpoints, points}`. Replaces the whole list. 0.5.0 and later. |
 | `break.list` | | Same as `break.set` |
 | `break.clear` | | Same as `break.set`, with no breakpoints |
-| `mem.read` | `address`, `size?` (1 to 4096, default 4), `bus?` (default 0) | `{address, data, length, via}`. `data` is hex in memory order. 0.6.0 and later. |
+| `mem.read` | `address`, `size?` (1 to 4096, default 4), `bus?` (default 0), `width?` | `{address, data, length, via}`. `data` is hex in memory order. 0.6.0 and later. `width` (0.15.0; 1, 2, 4 or 8): split into accesses of that many bytes, for register blocks (QEMU's GIC answers 4 and 8 byte accesses only; one access of the whole size reads zeros). `mem.write` takes it too. |
 | `profile.getStatus` | | `{active, problem?, enabled, period, seconds, cpus: [{cpu, samples}]}`. 0.8.0 and later. |
 | `profile.read` | `cpu?` | Same, plus `blocks: [[address, samples]]`, most samples first, of one CPU or all |
 | `profile.setEnabled` | `enabled` | Same as `profile.getStatus`. Off keeps the samples. |
@@ -84,9 +84,16 @@ connected at once.
 | `ftrace.setEnabled` | `enabled`, `space?` (`"all"`, `"kernel"`, `"user"`) | Same as `ftrace.getStatus`. Starts or stops recording; keeps the records. |
 | `ftrace.clear` | | Same; drops the records and starts the time (`seconds`, record times) again |
 | `ftrace.save` | `path` (absolute, on the simulator's machine) | `{path, cpus, events}`. Writes the records, see Function trace. |
+| `ftrace.tail` | `cpu`, `count?` (1 to 4096, default 64) | `{cpu, total, enabled, records: [[from \| kind, to, ns, insns]]}`: the newest records of one vCPU, oldest first; addresses as hex strings (kind in the low 2 bits: 1 call, 2 return). 0.16.0 and later. The Exceptions panel shows them for the CPU a catch stopped. |
+| `exc.getStatus` | | `{active, problem?, recording, capacity, total, hits, counts: [{kind, ec?, count}], rules, hit?}`. 0.15.0 and later; `active` needs `exceptions = true` at start. |
+| `exc.read` | `after?` (sequence number, default 0), `max?` (default 2000, at most 10000) | `{events, last, dropped}`: Events with `seq` > `after`, oldest first |
+| `exc.setRecording` | `recording` | Same as `exc.getStatus`. Off keeps the events; catching still works. |
+| `exc.clear` | | Same; drops the events and counts, numbering starts again at 1 |
+| `exc.setCatch` | `rules`: `[{kind?, ec?, fromEl?}]` | Same. Replaces the rules; see Exceptions and interrupts. |
 | `ckpt.save` | `dir`, `memories?`: `[{name, address, size, bus?}]`, `registers?`: `[{name, address, size?, bus?}]` | `{agent, time, devices, memories, registers}`, also written to `dir/agent.json`. Needs the simulation paused (or halted by a debugger). 0.10.0 and later. |
 
 Status: `{state: "running" | "paused" | "halted" | "ended", time: {seconds, text}, deltaCycles, stopAt?, reason?, requestedTime?}`.
+- `exceptionHit` (0.15.0, an Event of Exceptions and interrupts) is there while a catch rule keeps the simulation paused; `reason` is then `"exception"`.
 - `stopAt` (`{seconds, text}`) is there while a timed stop is pending.
 - `reason` is `"time"` in the notification sent when a timed stop pauses the
   simulation; `requestedTime` is then the time that was asked for, and `time`
@@ -228,7 +235,47 @@ Verified on 2026-11-15 (agent 0.4.0, Ubuntu platform, 8 CPUs, quantum 10 ms):
 - **Cancel and shutdown.** A manual pause cancels the pending stop. With a
   stop pending, SIGHUP still ends the simulator.
 
-## Function trace (0.11.0)
+## Exceptions and interrupts (0.15.0)
+
+With `exceptions = true` (and the same `libidlinker` plugin as the profiler)
+the agent registers QEMU's discontinuity callback (QEMU 10 and later) for
+interrupts and exceptions. It runs on the vCPU thread, with the BQL, right
+after the vCPU has taken the exception and before the first instruction of the
+handler: ESR, FAR, ELR and SPSR of the target EL already hold the new values
+and the PC is the vector. Nothing is instrumented at translation, so it costs
+only a callback per exception.
+
+- An Event is `[seq, vtime_ns, cpu, type, vec, elFrom, elTo, fromPc, toPc,
+  esr, far, elr, x8]`: `type` 1 interrupt, 2 exception (QEMU's); `vec` the vector
+  slot, (PC − VBAR_ELx) / 0x80, 0 to 15, or 255 when the PC is not in the
+  vector table (slots 0–3 current EL with SP_EL0, 4–7 current EL with SP_ELx,
+  8–11 lower EL AArch64, 12–15 lower EL AArch32; within a group sync, IRQ, FIQ,
+  SError); `elTo` from PSTATE, `elFrom` from SPSR (0 for AArch32);
+  addresses and registers as hex strings. `vtime_ns` is QEMU's virtual clock.
+  ESR and FAR mean something only for synchronous exceptions and SError.
+- The newest `exceptions_buffer` events are kept (default 4096); `counts`
+  covers every event since the last `exc.clear`, by kind and, for
+  synchronous ones, exception class (ESR bits 31:26).
+- Registers are read with `qemu_plugin_read_register`. QBox puts a
+  forward-declaration-only `glib.h` first on the include path, so the agent
+  mirrors glib's public `GArray`/`GByteArray` layouts and takes
+  `g_byte_array_new` from the glib libqemu already loaded (`dlopen` with
+  `RTLD_NOLOAD`).
+- A rule matches by `kind` (`sync`, `irq`, `fiq`, `serror`, `any`), `ec`
+  (synchronous only), `fromEl` and `syscalls` (numbers: only an SVC, EC 0x15,
+  whose x8 is one of them; Linux passes the system call number in x8). Events
+  have a 13th element, x8 for an SVC (0 otherwise). On the first match the callback halts that
+  vCPU (libqemu's `cpu_halt`, so it stops on the vector) and wakes the server
+  thread, which pauses the rest as `sim.pause` does; the status then has
+  `reason: "exception"` and `exceptionHit` (an Event) until the simulation
+  runs again.
+- A debugger attached to the gdbstub sees the pause as a stop (SIGINT, on the
+  thread it last continued, not necessarily the CPU that took the
+  exception). If it continues the VM itself, the agent notices the virtual
+  clock moving and continues too (reason `"resumed"`); this applies to every
+  pause by the agent.
+- Measured on the Ubuntu platform (8 CPUs, about 1,800 events a second during boot): boot to `login:` took 241 s and 252 s without recording, 276 s and 235 s with it; the difference is within the spread between runs. An interrupt costs four register reads (CPSR, VBAR, SPSR and nothing else), a synchronous exception six.
+
 
 With `ftrace = true` (and the same `libidlinker` plugin as the profiler) the
 agent records every call and return of the guest software, per vCPU:
@@ -283,8 +330,15 @@ CCI parameter. The launcher adds both:
 
 ```lua
 platform["qemu_inst"]["qemu_args.-plugin"] = "libidlinker.so,key=platform.sim_agent.profile_id"
-platform["sim_agent"] = { ...; profile = true; profile_period = 10000 }
+platform["sim_agent"] = { ...; profile = true; profile_period = 10000; plugin_qemu = "qemu_inst" }
 ```
+
+The id is valid only in the QEMU instance the plugin is loaded into. With
+several instances the agent must use that one: `plugin_qemu` (0.16.0) names it
+(the instance's name in the platform; empty: the first instance found, which
+before 0.16.0 could be another one, and registering callbacks there crashed the
+simulator). Profiling, the function trace and exception recording cover the
+CPUs of that instance only.
 
 How samples are taken:
 - Every translated block adds its instruction count to a per-vCPU scoreboard

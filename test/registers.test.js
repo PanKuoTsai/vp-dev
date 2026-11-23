@@ -69,3 +69,69 @@ test('registers: values, fields and the bytes of mem.read / mem.write', () => {
   assert.strictEqual(registers.notReadReason({ access: 'rw', readSideEffect: true }), 'reading it changes the device');
   assert.strictEqual(registers.notReadReason({ access: 'ro' }), '');
 });
+
+test('gic: layout, reads and the state of each interrupt with why it is not delivered', () => {
+  const gic = require('../lib/analysis/gic');
+  const doc = JSON.parse(JSON.stringify(require('../templates/ubuntu-aarch64.platform.json')));
+  const [g] = gic.layout(doc);
+  assert.strictEqual(g.name, 'gic_0');
+  assert.strictEqual(g.dist, 0x17a00000n);
+  assert.strictEqual(g.redist, 0x17a60000n);
+  assert.deepStrictEqual(g.sources.get(50), [{ module: 'virtionet0_0', port: 'irq_out' }]); // spi_in_18
+  assert.strictEqual(g.sources.get(30).length, 8); // the physical timer of every CPU
+  // Probe: GICD_TYPER.ITLinesNumber 1 (64 INTIDs), DS and Group 1 and ARE on; two redistributors, the second the last.
+  const hex = (b) => b.toString('hex');
+  const head = Buffer.alloc(16); head.writeUInt32LE(0x40 | 0x10 | 0x2, 0); head.writeUInt32LE(1, 4);
+  const rd = (cpu, aff, last, waker) => { const b = Buffer.alloc(24); b.writeBigUInt64LE((BigInt(aff) << 32n) | (BigInt(cpu) << 8n) | (last ? 0x10n : 0n), 8); b.writeUInt32LE(waker, 0x14); return b; };
+  const probeReads = gic.probeReads(g);
+  assert.strictEqual(gic.redistFrames(g), 14); // 0x1C0000 / 0x20000
+  assert.strictEqual(gic.redistHeadRead(g, 1).address, 0x17a80000n);
+  const probeData = gic.gather([
+    { read: probeReads[0], data: hex(head) }, { read: gic.redistHeadRead(g, 0), data: hex(rd(0, 0, false, 0)) }, { read: gic.redistHeadRead(g, 1), data: hex(rd(1, 1, true, 6)) },
+  ]);
+  const probe = gic.parseProbe(g, probeData);
+  assert.strictEqual(probe.lines, 64);
+  assert.deepStrictEqual(probe.redists.map((r) => [r.cpu, r.affinity, r.last]), [[0, 0, false], [1, 1, true]]);
+  const reads = gic.stateReads(g, probe);
+  assert.ok(reads.every((r) => r.size <= 4096 && r.size % r.width === 0));
+  assert.ok(reads.filter((r) => r.key === 'IROUTER').every((r) => r.width === 8));
+  // An agent without mem.read's width: one request per register, same data.
+  const one = gic.oneByOne(reads.filter((r) => r.key === 'ISENABLER'));
+  assert.deepStrictEqual([one.length, one[1].offset, one[1].address, one[1].size], [2, 4, 0x17a00104n, 4]);
+  // State: INTID 50 enabled, group 1, priority 0xa0, level, routed to CPU 1 (asleep);
+  // INTID 33 enabled with priority 0xFF and pending; INTID 34 routed to an affinity nobody has.
+  const n = 64; const bits = () => Buffer.alloc(n / 8);
+  const set = (b, i) => { b[i >> 3] |= 1 << (i & 7); return b; };
+  const en = set(set(set(bits(), 50), 33), 34); const grp = set(set(set(bits(), 50), 33), 34); const pend = set(bits(), 33);
+  const prio = Buffer.alloc(n, 0xa0); prio[33] = 0xff;
+  const route = Buffer.alloc((n - 32) * 8); route.writeBigUInt64LE(1n, (50 - 32) * 8); route.writeBigUInt64LE(5n, (34 - 32) * 8);
+  const byKey = { IGROUPR: grp, ISENABLER: en, ISPENDR: pend, ISACTIVER: bits(), IPRIORITYR: prio, ICFGR: Buffer.alloc(n / 4), IGRPMODR: bits(), IROUTER: route };
+  const res = reads.map((r) => ({ read: r, data: hex(byKey[r.key] ? byKey[r.key].subarray(r.offset, r.offset + r.size) : Buffer.alloc(r.size)) }));
+  const st = gic.interpret(g, probe, new Map([...gic.gather(res), ...probeData]));
+  assert.deepStrictEqual(st.dist, { lines: 64, ds: true, grp0: false, grp1: true, are: true });
+  assert.deepStrictEqual(st.cpus.map((c) => [c.cpu, c.asleep]), [[0, false], [1, true]]);
+  const row = (id, cpu) => st.rows.find((r) => r.intid === id && (cpu === undefined || r.cpu === cpu));
+  const r50 = row(50);
+  assert.deepStrictEqual([r50.enabled, r50.group, r50.priority, r50.edge, r50.route.text], [true, 'G1', 0xa0, false, 'CPU 1']);
+  assert.match(r50.problems[0].text, /redistributor is asleep/);
+  assert.match(row(33).problems.map((p) => p.text).join(' | '), /priority 0xFF.*\| .*pending/);
+  assert.match(row(34).problems[0].text, /affinity 0.0.0.5, which no CPU has/);
+  // PPIs come per CPU; CPU 0's physical timer is wired but not enabled.
+  assert.strictEqual(st.rows.filter((r) => r.intid === 30).length, 2);
+  assert.match(row(30, 0).problems[0].text, /disabled/);
+  assert.deepStrictEqual(row(30, 0).sources, [{ module: 'cpu_0', port: 'irq_timer_phys_out', cpu: 0 }]);
+  assert.ok(!gic.interesting(row(40)));
+  assert.deepStrictEqual(gic.summary(st).enabled, 3);
+});
+
+test('registers: what changed since the last stop, and the register at an address', () => {
+  const registers = require('../lib/analysis/registers');
+  const reg = { name: 'CR', offset: 0x30n, size: 4, fields: [{ name: 'UARTEN', msb: 0, lsb: 0 }, { name: 'TXE', msb: 8, lsb: 8 }, { name: 'RXE', msb: 9, lsb: 9 }] };
+  assert.deepStrictEqual(registers.changedFields(reg, 0x301n, 0x201n), [{ name: 'TXE', now: 1n, was: 0n }]);
+  assert.deepStrictEqual(registers.changedFields(reg, 0x301n, 0x301n), []);
+  assert.deepStrictEqual(registers.changedFields(reg, 0x301n, undefined), []);
+  const periphs = [{ id: 'uart', address: 0x9000000n, registers: [{ name: 'DR', offset: 0n, size: 4 }, reg] }];
+  assert.strictEqual(registers.registerAt(periphs, 0x9000032n).reg.name, 'CR');
+  assert.strictEqual(registers.registerAt(periphs, '0x9000000').reg.name, 'DR');
+  assert.strictEqual(registers.registerAt(periphs, 0x9000034n), undefined);
+});

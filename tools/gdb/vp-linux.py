@@ -10,12 +10,13 @@
 #                      reload the symbols there (-q: never fails, for initCommands)
 #   vp-ps [-t]         processes (-t: also threads), and what each CPU runs
 #   vp-dmesg [-n N]    the kernel log (printk ring buffer, Linux 5.10 and later)
+#   vp-lsmod           loaded kernel modules with their section addresses
 # MI commands for tools (VP Studio's Guest Processes view): -vp-ps, -vp-dmesg,
-# -vp-kaslr. They return the same data as MI results.
+# -vp-kaslr, -vp-lsmod. They return the same data as MI results.
 
 import gdb
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 MASK64 = (1 << 64) - 1
 
 
@@ -340,6 +341,58 @@ def _processes(threads):
     return {"processes": rows, "cpus": cpus}
 
 
+# ---------------------------------------------------------------- modules
+
+_MOD_STATES = {0: "live", 1: "coming", 2: "going", 3: "unformed"}
+
+
+def modules():
+    """Loaded modules: {release, modules: [{name, state, base, size, sections: [{name, address}]}]},
+    base and size of the module's core (text) area; sections from its sysfs attributes (the
+    addresses add-symbol-file needs), when the kernel keeps them."""
+    _ensure_symbols()
+    with _InKernel():
+        return _modules()
+
+
+def _modules():
+    head = _sym("modules")
+    if head is None:
+        raise VpError("No \"modules\" list in the symbol file: the kernel has no loadable modules.")
+    mt = "struct module"
+    has_mem = _has_field(_type(mt), "mem")  # Linux 6.4 and later: mem[MOD_TEXT]
+    rows = []
+    for m in _list(head, mt, "list"):
+        try:
+            name = m["name"].string()
+        except gdb.error:
+            continue
+        if has_mem:
+            area = m["mem"][0]
+        else:
+            area = m["core_layout"]
+        sections = []
+        try:
+            sa = m["sect_attrs"]
+            if int(sa):
+                for i in range(int(sa["nsections"])):
+                    a = sa["attrs"][i]
+                    sections.append({"name": a["battr"]["attr"]["name"].string(), "address": "0x%x" % (int(a["address"]) & MASK64)})
+        except gdb.error:
+            sections = []
+        rows.append({"name": name, "state": _MOD_STATES.get(int(m["state"]), str(int(m["state"]))),
+                     "base": "0x%x" % (int(area["base"].cast(_type("unsigned long"))) & MASK64), "size": int(area["size"]),
+                     "sections": sections})
+    release = ""
+    uts = _sym("init_uts_ns")
+    if uts is not None:
+        try:
+            release = uts["name"]["release"].string()
+        except gdb.error:
+            release = ""
+    return {"release": release, "modules": rows}
+
+
 # ---------------------------------------------------------------- dmesg
 
 
@@ -492,9 +545,24 @@ class VpDmesg(gdb.Command):
                 print("%s %s" % (ts, line))
 
 
+class VpLsmod(gdb.Command):
+    """vp-lsmod: loaded kernel modules, their core address and size."""
+
+    def __init__(self):
+        super().__init__("vp-lsmod", gdb.COMMAND_STATUS)
+
+    def invoke(self, arg, from_tty):
+        r = modules()
+        gdb.write("%-24s %-18s %10s  %s\n" % ("Module", "Base", "Size", "State"))
+        for m in r["modules"]:
+            gdb.write("%-24s %-18s %10d  %s\n" % (m["name"], m["base"], m["size"], m["state"]))
+        gdb.write("%d modules (Linux %s)\n" % (len(r["modules"]), r["release"]))
+
+
 VpKaslr()
 VpPs()
 VpDmesg()
+VpLsmod()
 
 if hasattr(gdb, "MICommand"):
 
@@ -539,6 +607,17 @@ if hasattr(gdb, "MICommand"):
         def invoke(self, argv):
             return {"version": VERSION}
 
+    class _MiLsmod(gdb.MICommand):
+        def __init__(self):
+            super().__init__("-vp-lsmod")
+
+        def invoke(self, argv):
+            try:
+                return modules()
+            except (VpError, gdb.error) as e:
+                raise gdb.GdbError(str(e))
+
+    _MiLsmod()
     _MiPs()
     _MiDmesg()
     _MiKaslr()
