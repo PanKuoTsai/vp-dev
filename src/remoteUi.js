@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const simagent = require('../lib/sim/simagent');
 const hostports = require('../lib/sim/hostports');
+const consoles = require('../lib/sim/consoles');
 const pin = require('../lib/setup/pin');
 const models = require('../lib/generate/models');
 const checkpoint = require('../lib/sim/checkpoint');
@@ -160,12 +161,15 @@ async function startRemote(uri, rc, debug, traceIds, opts) {
     const wanted = [...hostVars.map((v) => ({ name: v.name, preferred: v.port }))];
     if (agentLib) wanted.push({ name: '@agent' });
     if (debug) wanted.push({ name: '@gdb', preferred: gdbPort });
+    // UART consoles on char_backend_socket: a port on the remote host, forwarded here.
+    const uartSockets = consoles.consoles(platform.data).sockets.filter((k) => k.server && !k.problem);
+    for (const k of uartSockets) wanted.push({ name: `@uart:${k.name}`, preferred: k.port });
     const remotePorts = remote.pickPorts(busy, wanted);
     const forwards = [];
     const localOf = {};
     const used = new Set();
     for (const w of wanted) {
-      let lp = w.name === '@agent' ? undefined : w.name === '@gdb' ? gdbPort : remotePorts[w.name];
+      let lp = w.name === '@agent' ? undefined : w.name === '@gdb' ? gdbPort : w.name.startsWith('@uart:') ? w.preferred : remotePorts[w.name];
       if (!lp || used.has(lp) || !(await hostports.isPortFree(lp, '127.0.0.1'))) lp = await simagent.freePort();
       used.add(lp);
       localOf[w.name] = lp;
@@ -173,6 +177,10 @@ async function startRemote(uri, rc, debug, traceIds, opts) {
     }
     const options = {};
     if (debug) options.overrides = [{ instance: c.get('debug.cpuInstance'), param: c.get('debug.gdbPortParam'), value: remotePorts['@gdb'] }];
+    // The console listens on the remote host's loopback, where the SSH forward ends.
+    if (uartSockets.length) options.overrides = (options.overrides || []).concat(uartSockets.map((k) => ({ instance: k.name, param: 'address', value: `127.0.0.1:${remotePorts[`@uart:${k.name}`]}` })));
+    const uartConsoles = uartSockets.map((k) => Object.assign({}, k, { host: '127.0.0.1', port: remotePorts[`@uart:${k.name}`] }));
+    const localOfRemote = new Map(uartSockets.map((k) => [remotePorts[`@uart:${k.name}`], localOf[`@uart:${k.name}`]]));
     const hostPortValues = {};
     const movedPorts = [];
     for (const v of hostVars) {
@@ -219,6 +227,7 @@ async function startRemote(uri, rc, debug, traceIds, opts) {
     simUi.afterStart({
       uri, platform, options, debug, port: localOf['@gdb'], traceIds, probeIds, recording, opts, agentPort: localOf['@agent'],
       hostPortValues, movedPorts, where: `on ${rc.host}`, remoteInfo: { host: rc.host, forwards, remoteLua },
+      uartConsoles, mapConsolePort: (p) => localOfRemote.get(p),
     });
     if (debug && localOf['@gdb'] !== gdbPort) {
       vscode.window.showWarningMessage(`Port ${gdbPort} is taken on this machine, so the gdb server is forwarded to ${localOf['@gdb']}. Change the port in the "VP: attach to target software" configuration for this session.`);

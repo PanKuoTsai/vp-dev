@@ -160,3 +160,36 @@ testAsync('agent client: with handshake, a tunnel that accepts and closes is ret
   c.close();
   srv.close();
 });
+
+testAsync('uart consoles: socket backends, their UARTs, ports when taken, terminal text', async () => {
+  const cs = require('../lib/sim/consoles');
+  assert.deepStrictEqual(cs.parseAddress('127.0.0.1:4001'), { host: '127.0.0.1', port: 4001 });
+  assert.deepStrictEqual(cs.parseAddress('[::1]:5000'), { host: '::1', port: 5000 });
+  assert.strictEqual(cs.parseAddress('localhost'), null);
+  assert.strictEqual(cs.parseAddress('h:70000'), null);
+  const doc = { schemaVersion: '0.2', name: 'u', modules: {
+    router: { type: 'router' },
+    stdio: { type: 'char_backend_stdio' },
+    uart0: { type: 'Pl011', ports: { target_socket: { address: '0x9000000', size: '0x1000', bind: 'router.initiator_socket' }, backend_socket: { bind: 'stdio.biflow_socket' } } },
+    uart1: { type: 'Pl011', ports: { target_socket: { address: '0x9001000', size: '0x1000', bind: 'router.initiator_socket' } } },
+    uart1_console: { type: 'char_backend_socket', params: { address: '127.0.0.1:4001' }, ports: { biflow_socket: { bind: 'uart1.backend_socket' } } },
+    uart2_console: { type: 'char_backend_socket', ports: {} },
+    out: { type: 'char_backend_socket', params: { address: '10.0.0.5:7000', server: false } },
+    bad: { type: 'char_backend_socket', params: { address: 'nowhere' } },
+  } };
+  const c = cs.consoles(doc);
+  assert.deepStrictEqual(c.stdio, [{ name: 'stdio', uart: 'uart0.backend_socket' }]);
+  assert.deepStrictEqual(c.sockets.map((k) => [k.name, k.uart, k.host, k.port, k.server, !!k.problem]), [
+    ['uart1_console', 'uart1.backend_socket', '127.0.0.1', 4001, true, false],
+    ['uart2_console', '', '127.0.0.1', 4001, true, false], // the backend's default address
+    ['out', '', '10.0.0.5', 7000, false, false],
+    ['bad', '', null, null, true, true]]);
+  // 4001 is free for the first; the second asks for it too and moves; client and bad ones are left alone.
+  const freeList = [40500, 40501];
+  const r = await cs.choosePorts(c.sockets, { isFree: async (p) => p === 4001, pick: async () => freeList.shift() });
+  assert.deepStrictEqual(r.list.map((k) => [k.name, k.port]), [['uart1_console', 4001], ['uart2_console', 40500]]);
+  assert.deepStrictEqual(r.overrides, [{ instance: 'uart2_console', param: 'address', value: '127.0.0.1:40500' }]);
+  assert.deepStrictEqual(r.moved, [{ name: 'uart2_console', from: 4001, to: 40500 }]);
+  assert.strictEqual(cs.toTerminal('a\nb\r\nc'), 'a\r\nb\r\nc');
+  assert.deepStrictEqual(c.sockets.map(cs.terminalName), ['UART uart1', 'UART uart2_console', 'UART out', 'UART bad']);
+});

@@ -4,6 +4,12 @@ VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangel
 
 ## 未發布
 
+## 0.2.8（2026-11-23）
+
+### 新增
+
+- **多個 UART 主控台**：平台中接 `char_backend_socket` 的 UART，Start Simulation 時各開一個終端機（「UART <模組>」），可雙向收發；埠被占用時自動換空閒埠，遠端模擬經 SSH 轉發。
+
 ## 0.2.7（2026-11-23）
 
 ### 新增

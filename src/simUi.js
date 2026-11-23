@@ -15,6 +15,8 @@ const diskspace = require('../lib/sim/diskspace');
 const launch = require('../lib/sim/launch');
 const ftrace = require('../lib/analysis/ftrace');
 const gdbtargets = require('../lib/debug/gdbtargets');
+const consoles = require('../lib/sim/consoles');
+const consoleUi = require('./consoleUi');
 const checkpoint = require('../lib/sim/checkpoint');
 const shared = require('./shared');
 const common = require('./common');
@@ -130,7 +132,7 @@ function addAgentOptions(options, platform, { agentLib, agentVersion, agentPort,
 }
 
 /** What every start does once the simulator's terminal is open. */
-function afterStart({ uri, platform, options, debug, port, traceIds, probeIds, recording, opts, restore, agentPort, hostPortValues, movedPorts, where, remoteInfo }) {
+function afterStart({ uri, platform, options, debug, port, traceIds, probeIds, recording, opts, restore, agentPort, hostPortValues, movedPorts, where, remoteInfo, uartConsoles = [], mapConsolePort = undefined }) {
   shared.runningPlatform = uri;
   shared.runningDoc = platform.data;
   shared.runningOverrides = (options.overrides || []).slice();
@@ -147,6 +149,14 @@ function afterStart({ uri, platform, options, debug, port, traceIds, probeIds, r
   if (opts.profile) profileUi.showProfilePanel(uri, true);
   if (agentPort) agentUi.connectAgent({ port: agentPort, auto: true, handshake: !!remoteInfo });
   if (traceIds.length) traceUi.showTracePanel(true);
+  if (uartConsoles.length) {
+    consoleUi.openAll(uartConsoles, { mapPort: mapConsolePort, where: remoteInfo ? `forwarded from ${remoteInfo.host}` : '' });
+    const names = uartConsoles.map((k) => consoles.terminalName(k));
+    vscode.window.showInformationMessage(`UART console${names.length > 1 ? 's' : ''} in the terminal panel: ${names.join(', ')}.`, 'Show').then((x) => {
+      const t = consoleUi.terminals()[0];
+      if (x && t) t.show(false);
+    });
+  }
   const portList = Object.entries(hostPortValues).map(([k, v]) => `${k}=${v}`).join(', ');
   if (portList) shared.statusItem.tooltip = `Stop the simulation\nHost ports${remoteInfo ? ' (on this machine)' : ''}: ${portList}`;
   if (movedPorts.length) {
@@ -288,6 +298,19 @@ async function start(arg, debug, traceIds = [], opts = {}) {
   } catch (e) {
     vscode.window.showWarningMessage(`VP Studio: could not check host ports (${e.message}); starting with the configured ones.`);
   }
+  // UART consoles on char_backend_socket: keep each port when free, move it otherwise;
+  // a terminal per console opens once the simulator runs.
+  let uartConsoles = [];
+  try {
+    const found = consoles.consoles(platform.data);
+    for (const x of found.sockets.filter((k) => k.problem)) vscode.window.showWarningMessage(`UART console ${x.name}: ${x.problem}; no terminal is opened for it.`);
+    const chosen = await consoles.choosePorts(found.sockets, { isFree: hostports.isPortFree, pick: hostports.freePort });
+    uartConsoles = chosen.list;
+    if (chosen.overrides.length) options.overrides = (options.overrides || []).concat(chosen.overrides);
+    movedPorts = movedPorts.concat(chosen.moved);
+  } catch (e) {
+    vscode.window.showWarningMessage(`VP Studio: could not check the UART console ports (${e.message}).`);
+  }
   const agentLib = agentUi.simAgentLibrary();
   let agentPort;
   if ((opts.profile || opts.ftrace || opts.openocd) && !agentLib) {
@@ -321,7 +344,7 @@ async function start(arg, debug, traceIds = [], opts = {}) {
   const term = shared.terminal;
   const line = `${common.shq(exePath)} ${c.get('luaFlag')} ${common.shq(lua)}`;
   Promise.resolve(term.processId).then(() => term.sendText(line), () => term.sendText(line));
-  afterStart({ uri, platform, options, debug, port, traceIds, probeIds, recording, opts, restore, agentPort, hostPortValues, movedPorts });
+  afterStart({ uri, platform, options, debug, port, traceIds, probeIds, recording, opts, restore, agentPort, hostPortValues, movedPorts, uartConsoles });
 }
 
 /** Say which disk images are almost full, and how to free space in a Linux guest. */
@@ -387,6 +410,7 @@ function cmdStop() {
 
 function setRunning(running, detail) {
   menuUi.setCtx('vpStudio.running', running);
+  if (!running) consoleUi.closeAll();
   shared.statusItem.text = running ? `$(debug-stop) VP running${detail ? ' (' + detail + ')' : ''}` : '$(play) VP';
   shared.statusItem.tooltip = running ? 'Stop the simulation' : 'Start the simulation';
   shared.statusItem.command = running ? 'vpStudio.stop' : 'vpStudio.start';
