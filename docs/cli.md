@@ -23,6 +23,9 @@ bin/vp-run --qbox ~/qbox --snapshot --timeout 900 --junit boot.xml \
 | `--exec CMD` | 步驟完成後執行 CMD（`sh -c`），以它的結束碼為準；環境變數有 `VP_AGENT_HOST`、`VP_AGENT_PORT`、`VP_PLATFORM` 與平台的主機轉發埠（`HOST_PORT_SSH` 對應 `VP_HOST_PORT_SSH`） |
 | `--snapshot` | 以 `snapshot=on` 開磁碟映像：客體的修改不寫回，每次都從同一份映像開始，也不會累積 `*.journal~`（K-11） |
 | `--param INST.NAME=VALUE` | 這次執行改一個模組參數（VALUE 以 JSON 解析，失敗就當字串） |
+| `--fail-on REGEX` | 主控台一出現符合 REGEX 的輸出（例如 `Segmentation fault\|Kernel panic`）就失敗，不必等 `--expect` 逾時；可重複 |
+| `--exceptions`、`--profile`、`--ftrace` | 和 Start Simulation 一樣，讓 sim agent 記錄例外與中斷、取樣剖析、函式進出追蹤（`--exec` 的腳本以 `exc.*`、`profile.*`、`ftrace.*` 讀取；函式追蹤要以 `ftrace.setEnabled` 開始記錄）。需要 sim agent 0.15.0 以上（例外） |
+| `--probes` | 和 Start Simulation 一樣，在所有可插的位置放好探針、不記錄；`--exec` 的腳本以 `trace.setPoints` 開關、`trace.read` 讀取 |
 | `--agent PATH` 或 `none` | sim agent 函式庫；預設依序找 `VP_SIM_AGENT`、VS Code／VSCodium／VP Studio 獨立版建置的位置、擴充套件資料夾 |
 | `--log FILE`、`--junit FILE`、`--quiet` | 主控台輸出另存檔案；JUnit XML 報告（每個步驟一個 testcase，附最後 64 KB 主控台輸出）；不把主控台輸出印到 stdout |
 

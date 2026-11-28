@@ -2,7 +2,42 @@
 
 VP Studio 各版本的變更。格式依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)：每個版本分「新增、變更、修正」，使用者看得到的改變寫在前面。尚未發布的變更放在「未發布」，發布時改成版本號與日期。
 
-## 未發布
+## 0.2.12（2026-11-28）
+
+### 變更
+
+- **QBox 釘選改為 v7.4.5**（commit `1dd01f4b`，2026-11-25；以前是 v7.4.3 之後的 `adfde798`）。libqemu 隨之由 libqemu-v11.0-v0.17 升為 v0.21。三個 QBox 修補與 libqemu 修補不需修改即可套用；內附的元件目錄由這版重新產生（新增 `qemu_pcie`、`clic_riscv`，`qemu_rciep_pci` 已從 QBox 移除；並補上修補 0002 的 `tracer`、`signal_tracer`、`debug_dap`）。既有的 QBox 建置要換到這個 commit 重建（Build QBox 勾選 checkout 釘選 commit），sim agent 也要重建；Check QBox Version 在舊建置上會報與釘選不一致。
+
+## 0.2.11（2026-11-27）
+
+### 新增
+
+- **教學：Create Tutorial Workspace**：在 QBox 的 Ubuntu 平台旁建立一套完整演練（`vplogger-tutorial/TUTORIAL.md`）：一支會當掉、又很慢的客體程式 `vplogger`，從除錯（例外記錄、條件中斷點、MMU 轉換、程式符號）、剖析、函式追蹤、交易追蹤，到修正後的比較、CI 回歸測試與架構探索，每一步寫明用哪個工具、看到什麼、知道什麼。附三個版本的程式與原始碼、把程式寫進磁碟映像的 `install-vplogger.sh`（debugfs，不開機）、CI 腳本、架構探索的模型與掃描；建立時設定原始碼對應，並可立刻把程式寫進映像。
+- **Export Trace as Replay…**（Transaction Trace 面板的 Replay…）：把記錄到的存取轉成效能模型 `traffic_gen` 的重播檔，照原樣或把某一種存取（例如 virtio 的 QueueNotify）當成一定大小的傳輸；可只取一段、加快時間。
+- **Profile 的 Program…**：選一個以固定位址連結的使用者程式，使用者空間的樣本以它的函式名稱列出。
+- **Start from Checkpoint…** 可同時打開目標除錯埠、剖析與函式追蹤（以前只能二選一：一般或除錯埠）。
+- **vp-run**：`--fail-on REGEX`（主控台一出現就失敗，不等逾時）、`--exceptions`、`--profile`、`--ftrace`、`--probes`（和 Start Simulation 一樣打開 sim agent 的功能，給 `--exec` 的腳本用）。
+- 函式追蹤摘要多一張「Functions by instructions with callees」表（含子函式的指令數），一個系統呼叫的整條路徑一眼可見。
+- Load Symbol File at Address… 對以固定位址連結的程式自動填好 `.text` 位址。
+
+### 修正
+
+- **Add Conditional Breakpoint 不停**：函式宣告的那一行可能只對應到被 inline 的副本（Linux 的 `arm64_force_sig_fault`：265 行），中斷點永遠不會觸發。現在改用 gdb 對 `break <函式>` 選的那一行（267 行）。
+- **從存檔啟動的模擬以同一名稱再存檔，會毀掉存檔**：取代存檔時先刪資料夾，連同模擬正在用的磁碟副本，存檔因此不完整。現在拒絕並說明。從存檔啟動時，若另一個從同一存檔啟動的模擬還在跑，也拒絕複製磁碟（以前會改到它的磁碟）。
+- **Markdown 預覽沒有開**（函式追蹤摘要、第三方除錯器說明）：VS Code 的 Markdown 擴充套件還沒啟動時，`markdown.showPreview` 不在已註冊的指令清單裡，VP Studio 就改以文字開啟。現在直接呼叫，失敗才以文字開啟。
+- **Add Debug Configurations 找不到平台的符號檔**：焦點在終端機或面板、工作區又有多個平台時，找不到平台，設定裡就沒有 vmlinux。現在改用正在執行的平台。
+
+## 0.2.10（2026-11-23）
+
+### 新增
+
+- **OpenOCD 除錯埠的核心除錯（G-13 第二段）**：Start Simulation with OpenOCD Port 寫出的 OpenOCD 設定改為每顆核心一個 `aarch64` 目標（一個 SMP 群組，gdb server 在 3333 埠、每顆核心一個 thread）。OpenOCD 可以停住、單步、讀寫暫存器與記憶體、設硬體與軟體中斷點，gdb 可經 OpenOCD 除錯客體核心。需要更新 QBox 的修補 0002（Build QBox），模擬器的 `debug_dap` 才有這些功能。
+- **Build QBox 先檢查主機的套件**：建置前檢查 QBox 需要的工具與開發套件（cmake 3.21 以上、編譯器、ninja、Python venv 與標頭檔、libelf、libzip、GLib、libfdt、asio，以及 libqemu 用到的 pixman、slirp、SDL2、epoxy、libjpeg、virglrenderer）。以前缺一個套件要等 CMake 或 libqemu 的 configure 跑到一半才失敗，而且一次只報一個。缺套件時 Build QBox 檢視列出缺的項目與 `sudo apt install` 指令（Copy install command、Check again；確定檢查不準時可 Build Anyway），`tools/qbox-pin/build-qbox.sh` 也在 clone 之前停下並印出同樣的清單（`--no-deps-check` 跳過）。單獨檢查：`bash tools/qbox-pin/check-deps.sh`。
+- `vp-kaslr`（`tools/gdb/vp-linux.py` 0.3.1）在讀不到 VBAR_EL1 時（OpenOCD 的 gdb server），改由核心 CPU 的 PC 以 2 MiB 為單位找出 KASLR 位移。
+
+### 變更
+
+- OpenOCD 設定不再有 `vp_halt`、`vp_resume`、`vp_halt_all`、`vp_resume_all`：改用 OpenOCD 自己的 `halt`、`resume`。`vp_status` 保留。gdb 斷開時核心繼續執行。
 
 ## 0.2.9（2026-11-23）
 

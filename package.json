@@ -2,7 +2,7 @@
   "name": "vp-studio",
   "displayName": "VP Studio",
   "description": "Configure, inspect, run and debug QBox-based virtual platforms from a JSON platform description.",
-  "version": "0.2.9",
+  "version": "0.2.12",
   "publisher": "novatek",
   "repository": {
     "type": "git",
@@ -34,6 +34,7 @@
       { "command": "vpStudio.startTrace", "title": "Start Simulation with Tracing…", "category": "VP Studio", "icon": "$(pulse)" },
       { "command": "vpStudio.showTrace", "title": "Show Transaction Trace", "category": "VP Studio", "icon": "$(list-flat)" },
       { "command": "vpStudio.chooseProbes", "title": "Choose Probes…", "category": "VP Studio", "icon": "$(record)", "enablement": "vpStudio.agentConnected" },
+      { "command": "vpStudio.trace.exportReplay", "title": "Export Trace as Replay…", "category": "VP Studio", "icon": "$(debug-rerun)" },
       { "command": "vpStudio.refreshGuest", "title": "Refresh Guest Processes", "category": "VP Studio", "icon": "$(refresh)" },
       { "command": "vpStudio.showKernelLog", "title": "Show Guest Kernel Log", "category": "VP Studio", "icon": "$(output)" },
       { "command": "vpStudio.startProfile", "title": "Start Simulation with Profiling", "category": "VP Studio", "icon": "$(flame)" },
@@ -52,6 +53,7 @@
       { "command": "vpStudio.showPlatform", "title": "Show Platform View", "category": "VP Studio", "icon": "$(type-hierarchy)" },
       { "command": "vpStudio.addDebugConfigurations", "title": "Add Debug Configurations", "category": "VP Studio", "icon": "$(debug-configure)" },
       { "command": "vpStudio.createExample", "title": "Create Example Platform (Ubuntu AArch64)", "category": "VP Studio", "icon": "$(new-file)" },
+      { "command": "vpStudio.createTutorial", "title": "Create Tutorial Workspace", "category": "VP Studio", "icon": "$(mortar-board)" },
       { "command": "vpStudio.pause", "title": "Pause Simulation", "category": "VP Studio", "icon": "$(debug-pause)" },
       { "command": "vpStudio.continue", "title": "Continue Simulation", "category": "VP Studio", "icon": "$(debug-continue)" },
       { "command": "vpStudio.refreshRegisters", "title": "Read Registers Again", "category": "VP Studio", "icon": "$(refresh)" },
@@ -142,6 +144,7 @@
       "vpStudio.menu.analysis": [
         { "command": "vpStudio.showTrace", "group": "1_section@1" },
         { "command": "vpStudio.chooseProbes", "when": "vpStudio.agentConnected", "group": "1_section@2" },
+        { "command": "vpStudio.trace.exportReplay", "group": "1_section@3" },
         { "command": "vpStudio.showProfile", "group": "2_section@1" },
         { "command": "vpStudio.ftrace.record", "when": "vpStudio.agentConnected", "group": "3_section@1" },
         { "command": "vpStudio.ftrace.save", "when": "vpStudio.agentConnected", "group": "3_section@2" },
@@ -180,8 +183,9 @@
         { "command": "vpStudio.generate", "group": "2_section@1" },
         { "command": "vpStudio.generateDeviceTree", "group": "2_section@2" },
         { "command": "vpStudio.createExample", "group": "3_section@1" },
-        { "command": "vpStudio.exportKit", "group": "3_section@2" },
-        { "command": "vpStudio.openKit", "group": "3_section@3" }
+        { "command": "vpStudio.createTutorial", "when": "vpStudio.localSim", "group": "3_section@2" },
+        { "command": "vpStudio.exportKit", "group": "3_section@3" },
+        { "command": "vpStudio.openKit", "group": "3_section@4" }
       ],
       "vpStudio.menu.models": [
         { "command": "vpStudio.newModel", "group": "1_section@1" },

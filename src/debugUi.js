@@ -24,6 +24,7 @@ const simUi = require('./simUi');
 const mmuUi = require('./mmuUi');
 const linuxUi = require('./linuxUi');
 const memoryUi = require('./memoryUi');
+const gdbUi = require('./gdbUi');
 
 /**
  * Third-Party Debugger Setup… (G-11): a TRACE32 script and a guide for
@@ -84,11 +85,13 @@ async function writeOpenOcdConfig(uri, doc, port) {
   const n = debugdap.targets(doc).cpus.length;
   await fs.promises.writeFile(file, debugdap.openocdConfig({ port, cpus: n, platform: name }), 'utf8');
   const cmd = `openocd -f "${file}"`;
+  const gdb = 'gdb-multiarch -ex "target extended-remote localhost:3333"';
   const pick = await vscode.window.showInformationMessage(
-    `OpenOCD debug port on 127.0.0.1:${port} (${n} core${n === 1 ? '' : 's'}). Run: ${cmd}, then use telnet localhost 4444: vp_halt <n>, vp_resume <n>, vp_halt_all, vp_resume_all, vp_status, vp.sys mdw <address>.`,
-    'Open Configuration', 'Copy Command');
+    `OpenOCD debug port on 127.0.0.1:${port} (${n} core${n === 1 ? '' : 's'}). Run: ${cmd}. Then telnet localhost 4444 for OpenOCD's commands (halt, resume, step, reg, mdw, bp, vp_status), or gdb on port 3333 (one thread per core).`,
+    'Open Configuration', 'Copy Command', 'Copy gdb Command');
   if (pick === 'Open Configuration') await vscode.window.showTextDocument(vscode.Uri.file(file));
   if (pick === 'Copy Command') await vscode.env.clipboard.writeText(cmd);
+  if (pick === 'Copy gdb Command') await vscode.env.clipboard.writeText(gdb);
 }
 
 /**
@@ -192,7 +195,9 @@ async function cmdAddDebugConfigs(arg) {
   const c = common.cfg();
   const found = arg instanceof vscode.Uri ? [arg] : await vscode.workspace.findFiles('**/*' + common.SUFFIX, '**/node_modules/**', 2);
   const active = vscode.window.activeTextEditor;
-  const platformUri = active && common.isPlatform(active.document) ? active.document.uri : found.length === 1 ? found[0] : undefined;
+  // The platform in the editor, else the one that is running (a terminal or a panel may have the focus), else the only one.
+  const platformUri = active && common.isPlatform(active.document) ? active.document.uri
+    : shared.runningPlatform ? shared.runningPlatform : found.length === 1 ? found[0] : undefined;
   const symbols = platformUri ? await symbolFilesFor(platformUri) : [];
   // Without a symbol file, leave "program" out: the CDT adapter aborts the
   // attach when "program" names a file that does not exist, and gdb works
@@ -389,6 +394,16 @@ async function cmdAddConditionalBreakpoint() {
     if (!pick) return;
     loc = locs[items.indexOf(pick)];
   }
+  // The line gdb stops at for `break <function>` in the function's own code: the declaration line
+  // can name only copies inlined into callers.
+  try {
+    const addr = breakpoints.functionAddress(await gdbUi.mi(s, `-data-evaluate-expression &${fn}`));
+    const ins = await gdbUi.mi(s, `-break-insert -d ${fn}`);
+    const num = breakpoints.breakpointNumber(ins);
+    if (num) await gdbUi.mi(s, `-break-delete ${num}`).catch(() => {});
+    const entry = breakpoints.entryLine(ins, addr);
+    if (entry && entry.line && (!entry.file || path.basename(entry.file) === path.basename(loc.file))) loc = { file: loc.file, line: entry.line };
+  } catch (e) { /* keep the declaration line */ }
   const condition = await vscode.window.showInputBox({ title: 'Conditional Breakpoint (2/3): condition', prompt: 'A C expression gdb evaluates at each hit; empty for none. Registers are $x0, $sp…',
     placeHolder: 'user_tick == 0' });
   if (condition === undefined) return;

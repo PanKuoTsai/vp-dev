@@ -46,10 +46,9 @@ function taskCwd(preferred) {
  */
 async function showMarkdown(file) {
   const uri = vscode.Uri.file(file);
-  const cmds = await vscode.commands.getCommands(true);
-  if (cmds.includes('markdown.showPreview')) {
-    try { await vscode.commands.executeCommand('markdown.showPreview', uri); return; } catch (e) { /* fall back to the text */ }
-  }
+  // Not checked with getCommands: it lists only the commands of extensions that are active, and
+  // VS Code's Markdown extension starts on this very command. Unknown (Theia) throws.
+  try { await vscode.commands.executeCommand('markdown.showPreview', uri); return; } catch (e) { /* fall back to the text */ }
   await vscode.window.showTextDocument(uri, { preview: false });
 }
 

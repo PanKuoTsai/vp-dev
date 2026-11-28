@@ -61,4 +61,5 @@ $('cpu').addEventListener('change', () => post({ type: 'cpu', cpu: $('cpu').valu
 $('sampling').addEventListener('click', () => post({ type: 'sampling', enabled: $('sampling').getAttribute('aria-pressed') !== 'true' }));
 $('reset').addEventListener('click', () => post({ type: 'reset' }));
 $('choose').addEventListener('click', () => post({ type: 'chooseSymbols' }));
+$('program').addEventListener('click', () => post({ type: 'chooseProgram' }));
 post({ type: 'ready' });

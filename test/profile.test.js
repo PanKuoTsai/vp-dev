@@ -259,3 +259,45 @@ test('function trace: the last calls of a CPU (ftrace.tail) as indented rows and
   assert.deepStrictEqual(r3.open, ['do_sys_open', 'getname', 'strncpy_from_user']);
   assert.strictEqual(ft.recentCalls(withVec, ft.namer(fns, 0n)).open.length, 4);
 });
+
+test('profile: a user program\'s symbols name the user-space samples; ELF type and .text of a program', () => {
+  const prof = require('../lib/analysis/profile');
+  const elfsym = require('../lib/analysis/elfsym');
+  const user = [{ name: 'filter', start: 0x400c00n, size: 0x40n }, { name: 'format_record', start: 0x400d40n, size: 0x100n }];
+  const blocks = [['0x400c10', 7], ['0x400d80', 3], ['0x0000ffff8b8ffd3c', 5], ['0xffff800008100010', 2]];
+  const s = prof.summarize(blocks, [], 0n, user);
+  assert.deepStrictEqual(s.rows.map((r) => [r.name, r.samples, r.space, r.resolved]), [
+    ['filter', 7, 'user', true], ['[user space, outside the program: libraries, other processes]', 5, 'user', false],
+    ['format_record', 3, 'user', true], ['[kernel, no symbol]', 2, 'kernel', false],
+  ]);
+  assert.deepStrictEqual(s.user, { samples: 15, resolved: 10 });
+  // Without a program: one row, as before.
+  assert.deepStrictEqual(prof.summarize(blocks, [], 0n).rows[0], { name: '[user space]', samples: 15, space: 'user', resolved: false });
+  // The tutorial programs are linked at a fixed address: Load Symbols fills in their .text.
+  const bin = path.join(__dirname, '..', 'templates', 'tutorial', 'vplogger', 'bin', 'vplogger-bug');
+  const info = elfsym.elfInfo(bin);
+  assert.strictEqual(info.type, 'exec');
+  assert.ok(info.text >= 0x400000n && info.text < 0x500000n, info.text.toString(16));
+  const fns = elfsym.readSymbols(bin).functions.map((f) => f.name);
+  for (const f of ['main', 'filter', 'format_record', 'write_all']) assert.ok(fns.includes(f), f);
+  assert.throws(() => elfsym.elfInfo(__filename), /not an ELF/);
+});
+
+test('ftrace: the summary also ranks functions with their callees (a system call\'s whole path)', () => {
+  const ftrace = require('../lib/analysis/ftrace');
+  const built = {
+    start: 0, end: 1e9, cpus: [{ cpu: 0, recorded: 10, total: 10, slices: [], unmatched: 0, switches: 0 }],
+    functions: new Map([
+      ['__arm64_sys_fsync', { calls: 2, insns: 9000, self: 100, ns: 1, user: false }],
+      ['ext4_sync_file', { calls: 2, insns: 8800, self: 300, ns: 1, user: false }],
+      ['memset', { calls: 50, insns: 2000, self: 2000, ns: 1, user: false }],
+    ]),
+  };
+  const md = ftrace.summary(built, { limit: 4 });
+  const own = md.indexOf('## Functions by own instructions');
+  const trees = md.indexOf('## Functions by instructions with callees');
+  assert.ok(own > 0 && trees > own, md);
+  const part = md.slice(trees);
+  assert.ok(part.indexOf('`__arm64_sys_fsync` | 2 | 9,000 | 4,500 | 100 |') > 0, part);
+  assert.ok(part.indexOf('__arm64_sys_fsync') < part.indexOf('ext4_sync_file') && part.indexOf('ext4_sync_file') < part.indexOf('memset'));
+});

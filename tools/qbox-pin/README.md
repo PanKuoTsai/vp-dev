@@ -15,6 +15,24 @@ in [`qbox.pin.json`](../../qbox.pin.json) at the root of the extension:
 QBox's `package-lock.cmake` fixes the versions of SystemC, CCI, SCP and libqemu,
 so the QBox commit pins all of them.
 
+## Check the host's packages
+
+```sh
+tools/qbox-pin/check-deps.sh [--preset NAME] [--tsv]
+```
+
+Checks what QBox's build needs from the host: cmake 3.21 or newer, make, git,
+pkg-config, ninja, the preset's compiler (gcc/g++, clang/clang++, lld for
+clang-lto), python3 with venv and its headers; the libraries QBox's
+CMakeLists.txt asks for (libelf, libzip, glib-2.0, libfdt, asio) and those
+QBox's libqemu configure enables (pixman, slirp, SDL2, epoxy, libjpeg,
+virglrenderer). Libraries are looked up with pkg-config, which honours
+`PKG_CONFIG_PATH`. Exit code 1 when something is missing, with the Ubuntu
+package names and, on Debian or Ubuntu, the `sudo apt install` line.
+`--tsv` prints one line per check for VP Studio's Build QBox view. When
+QBox's dependencies change (CMakeLists.txt, libqemu's configure options in
+its CMake), update this list.
+
 ## Build the pinned QBox
 
 ```sh
@@ -22,6 +40,9 @@ tools/qbox-pin/build-qbox.sh [--jobs N] [--targets "aarch64"] [--no-catalog] DIR
 ```
 
 The script:
+0. Checks the host's tools and development libraries with `check-deps.sh`
+   (below) and stops, listing what is missing and the `apt install` command,
+   before cloning or downloading anything. `--no-deps-check` skips this.
 1. Clones QBox into `DIR`, or reuses it, and checks out the pinned commit. It
    refuses to check out over local changes to tracked files.
 2. Applies the QBox patches (`apply-patch.sh`). A patch that is applied is

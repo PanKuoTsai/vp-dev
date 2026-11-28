@@ -163,7 +163,16 @@ async function cmdLoadSymbols() {
   if (!stopped()) { vscode.window.showWarningMessage('Pause the target (F6) first.'); return; }
   const files = await vscode.window.showOpenDialog({ canSelectMany: false, title: 'ELF file with symbols (a kernel module .ko, a library, firmware…)' });
   if (!files || !files.length) return;
-  const addr = await vscode.window.showInputBox({ title: `Load ${path.basename(files[0].fsPath)}: address of its .text`, prompt: 'Where its .text section is loaded, e.g. 0xffff800001234000 (for a Linux module: cat /sys/module/<name>/sections/.text as root)' });
+  // A program linked at a fixed address (not position independent) runs where it was linked.
+  let info;
+  try { info = require('../lib/analysis/elfsym').elfInfo(files[0].fsPath); } catch (e) { info = undefined; }
+  const fixed = info && info.type === 'exec' && info.text !== undefined;
+  const addr = await vscode.window.showInputBox({
+    title: `Load ${path.basename(files[0].fsPath)}: address of its .text`,
+    value: fixed ? `0x${info.text.toString(16)}` : undefined,
+    prompt: fixed ? 'A program linked at a fixed address: its own .text address is filled in. Its symbols apply while it is the process running on the CPU.'
+      : 'Where its .text section is loaded, e.g. 0xffff800001234000 (for a Linux module: cat /sys/module/<name>/sections/.text as root)',
+  });
   if (!addr) return;
   let cmd;
   try { cmd = tools.addSymbolFileCommand(files[0].fsPath, addr); } catch (e) { vscode.window.showErrorMessage(e.message); return; }
@@ -295,3 +304,4 @@ exports.cmdLoadSymbols = cmdLoadSymbols;
 exports.cmdStepping = cmdStepping;
 exports.cmdJumpToCursor = cmdJumpToCursor;
 exports.cmdMonitor = cmdMonitor;
+exports.mi = mi;

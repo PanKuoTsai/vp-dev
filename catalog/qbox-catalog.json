@@ -1,8 +1,8 @@
 {
   "catalogVersion": "0.1",
-  "generated": "2026-11-14T12:40:48Z",
+  "generated": "2026-11-28T11:46:02Z",
   "qbox": {
-    "commit": "adfde7985eefe806ebd40b43f2516a5ac5cb5e51",
+    "commit": "1dd01f4b1fbf8ecddf10093a992807369ea161ef",
     "dirty": true,
     "libdir": "<qbox>/build"
   },
@@ -1108,7 +1108,7 @@
           {
             "name": "clock_mhz",
             "type": "double",
-            "default": 1000.0,
+            "default": 1000,
             "description": "Bus clock in MHz"
           },
           {
@@ -1297,6 +1297,225 @@
         "subModules": []
       }
     },
+    "clic_riscv": {
+      "library": "clic_riscv.so",
+      "isContainer": false,
+      "source": "qemu-components/irq-ctrl/clic_riscv/src/clic-riscv.cc",
+      "args": [
+        {
+          "decl": "sc_core::sc_object*",
+          "kind": "object",
+          "expects": "QemuInstance"
+        }
+      ],
+      "introspection": {
+        "status": "ok",
+        "cppType": "clic_riscv",
+        "ports": [
+          {
+            "name": "mem",
+            "kind": "tlm_target",
+            "busWidth": 32,
+            "cppType": "QemuTargetSocket<32u>"
+          },
+          {
+            "name": "mem_interrupt",
+            "kind": "tlm_target",
+            "busWidth": 32,
+            "cppType": "QemuTargetSocket<32u>"
+          },
+          {
+            "name": "irq_in",
+            "kind": "signal_in",
+            "vector": true,
+            "defaultSize": 32,
+            "cppType": "sc_core::sc_vector<QemuTargetSignalSocket>"
+          },
+          {
+            "name": "irq_in_0",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_1",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_2",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_3",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_4",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_5",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_6",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_7",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_8",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_9",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_10",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_11",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_12",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_13",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_14",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_15",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_16",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_17",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_18",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_19",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_20",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_21",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_22",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_23",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_24",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_25",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_26",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_27",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_28",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_29",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_30",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_in_31",
+            "kind": "signal_in",
+            "cppType": "QemuTargetSignalSocket"
+          },
+          {
+            "name": "irq_out",
+            "kind": "signal_out",
+            "cppType": "QemuInitiatorSignalSocket"
+          }
+        ],
+        "params": [
+          {
+            "name": "aperture_size",
+            "type": "unsigned long",
+            "default": 16777216,
+            "description": "CLIC aperture size"
+          },
+          {
+            "name": "num_sources",
+            "type": "unsigned int",
+            "default": 32,
+            "description": "Number of CLIC sources"
+          }
+        ],
+        "subModules": [
+          "run_on_sysc_0 (gs::runonsysc)"
+        ]
+      }
+    },
     "component_constructor": {
       "library": "component_constructor.so",
       "isContainer": false,
@@ -1305,7 +1524,7 @@
       "introspection": {
         "status": "failed",
         "reason": "killed by signal Aborted",
-        "log": "        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: node_exe_path CCI parameter is not set!\nIn file: <qbox>/systemc-components/component_constructor/include/component_constructor.h:43\n\nInfo: (I99) simulation aborted\n"
+        "log": "        SystemC 3.0.2-Accellera --- Nov 28 2026 19:28:53\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: node_exe_path CCI parameter is not set!\nIn file: <qbox>/systemc-components/component_constructor/include/component_constructor.h:43\n\nInfo: (I99) simulation aborted\n"
       },
       "hint": "Loads the shared library named by node_exe_path (and needs node_name) in its constructor, so it cannot be introspected without a real component."
     },
@@ -4108,6 +4327,12 @@
             "description": "Cache block zero operation block size"
           },
           {
+            "name": "clic",
+            "type": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >",
+            "default": "",
+            "description": "CLIC sibling instance"
+          },
+          {
             "name": "debug",
             "type": "bool",
             "default": true,
@@ -4514,6 +4739,69 @@
         "string argument of cpu_sifive_X280 left empty"
       ]
     },
+    "debug_dap": {
+      "library": "debug_dap.so",
+      "isContainer": false,
+      "source": "systemc-components/debug_dap/src/debug_dap.cc",
+      "args": [],
+      "introspection": {
+        "status": "ok",
+        "cppType": "debug_dap",
+        "ports": [
+          {
+            "name": "mem",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "tlm_utils::simple_initiator_socket<debug_dap, 32u, tlm::tlm_base_protocol_types>"
+          },
+          {
+            "name": "halt",
+            "kind": "signal_out",
+            "vector": true,
+            "defaultSize": 1,
+            "cppType": "sc_core::sc_vector<sc_core::sc_port<sc_core::sc_signal_inout_if<bool>, 1, (sc_core::sc_port_policy)1> >"
+          },
+          {
+            "name": "halt_0",
+            "kind": "signal_out",
+            "cppType": "sc_core::sc_port<sc_core::sc_signal_inout_if<bool>, 1, (sc_core::sc_port_policy)1>"
+          }
+        ],
+        "params": [
+          {
+            "name": "cpus",
+            "type": "unsigned int",
+            "default": 1,
+            "description": "Number of cores: halt_0 .. halt_<cpus-1>, each bound to a CPU's halt signal"
+          },
+          {
+            "name": "host",
+            "type": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >",
+            "default": "127.0.0.1",
+            "description": "Address to listen on"
+          },
+          {
+            "name": "midr",
+            "type": "unsigned long",
+            "default": 1095749809,
+            "description": "MIDR_EL1 shown in each core's external debug registers"
+          },
+          {
+            "name": "port",
+            "type": "unsigned int",
+            "default": 0,
+            "description": "TCP port for OpenOCD's remote_bitbang adapter (0: none)"
+          },
+          {
+            "name": "qemu",
+            "type": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >",
+            "default": "",
+            "description": "QEMU instance of the cores, for core debug (empty: the only one); core n is QEMU's CPU n"
+          }
+        ],
+        "subModules": []
+      }
+    },
     "display": {
       "library": "display.so",
       "isContainer": false,
@@ -4603,7 +4891,7 @@
           {
             "name": "age_limit_ns",
             "type": "double",
-            "default": 1000.0,
+            "default": 1000,
             "description": "FR-FCFS: a request older than this is served first, so open-row hits cannot starve it (0: no limit)"
           },
           {
@@ -4621,7 +4909,7 @@
           {
             "name": "clock_mhz",
             "type": "double",
-            "default": 1600.0,
+            "default": 1600,
             "description": "DRAM clock in MHz (data moves on both edges: 1600 MHz is DDR4-3200)"
           },
           {
@@ -4633,7 +4921,7 @@
           {
             "name": "frontend_ns",
             "type": "double",
-            "default": 0.0,
+            "default": 0,
             "description": "Extra controller latency added to every response, in ns"
           },
           {
@@ -4687,13 +4975,13 @@
           {
             "name": "tREFI_ns",
             "type": "double",
-            "default": 7800.0,
+            "default": 7800,
             "description": "Refresh interval, in ns"
           },
           {
             "name": "tRFC_ns",
             "type": "double",
-            "default": 350.0,
+            "default": 350,
             "description": "Refresh time, in ns (0: no refresh)"
           },
           {
@@ -4912,7 +5200,7 @@
       "introspection": {
         "status": "failed",
         "reason": "killed by signal Aborted",
-        "log": "\n        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\nterminate called after throwing an instance of 'sc_core::sc_report'\n  what():  Error: cciutils.find_sc_obj: Unable to find platform.dep_reg_router.reg_router in sc_object platform.dep_reg_router\nIn file: <qbox>/systemc-components/common/src/cciutils.cc:39\n"
+        "log": "\n        SystemC 3.0.2-Accellera --- Nov 28 2026 19:28:53\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\nterminate called after throwing an instance of 'sc_core::sc_report'\n  what():  Error: cciutils.find_sc_obj: Unable to find platform.dep_reg_router.reg_router in sc_object platform.dep_reg_router\nIn file: <qbox>/systemc-components/common/src/cciutils.cc:39\n"
       },
       "hint": "Arguments are a container holding a reg_router and a gs_memory for the registers; not introspected."
     },
@@ -11457,7 +11745,7 @@
       "introspection": {
         "status": "failed",
         "reason": "killed by signal Aborted",
-        "log": "        SystemC 3.0.2-Accellera --- Nov 14 2026 12:36:16\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: py_module_dir and py_module_name parameters shouldn't be empty!\nIn file: <qbox>/systemc-components/python_binder/src/python_binder.cc:392\n\nInfo: (I99) simulation aborted\n"
+        "log": "        SystemC 3.0.2-Accellera --- Nov 28 2026 19:28:53\n        Copyright (c) 1996-2025 by all Contributors,\n        ALL RIGHTS RESERVED\n\nFatal: platform.dut: py_module_dir and py_module_name parameters shouldn't be empty!\nIn file: <qbox>/systemc-components/python_binder/src/python_binder.cc:392\n\nInfo: (I99) simulation aborted\n"
       },
       "hint": "Imports the Python module named by py_module_dir and py_module_name in its constructor, so it cannot be introspected without a real module."
     },
@@ -11968,6 +12256,587 @@
         "subModules": []
       }
     },
+    "qemu_pcie": {
+      "library": "qemu_pcie.so",
+      "isContainer": false,
+      "source": "qemu-components/pci/qemu_pcie/src/qemu_pcie.cc",
+      "args": [
+        {
+          "decl": "sc_core::sc_object*",
+          "kind": "object",
+          "expects": "QemuInstance"
+        },
+        {
+          "decl": "sc_core::sc_object*",
+          "kind": "object",
+          "expects": "qemu_gpex"
+        }
+      ],
+      "introspection": {
+        "status": "ok",
+        "cppType": "qemu_pcie",
+        "ports": [
+          {
+            "name": "msi_target_socket",
+            "kind": "tlm_target",
+            "busWidth": 32,
+            "cppType": "tlm_utils::multi_passthrough_target_socket_optional<qemu_pcie, 32u, tlm::tlm_base_protocol_types, 0u>"
+          },
+          {
+            "name": "msix_target_socket",
+            "kind": "tlm_target",
+            "busWidth": 32,
+            "cppType": "tlm_utils::multi_passthrough_target_socket_optional<qemu_pcie, 32u, tlm::tlm_base_protocol_types, 0u>"
+          },
+          {
+            "name": "msi_config",
+            "kind": "sc_port",
+            "cppType": "gs::bindable_socket<sc_core::sc_port<gs::PCIeMsiConfigIf, 1, (sc_core::sc_port_policy)1>, sc_core::sc_export<gs::PCIeMsiConfigIf> >"
+          },
+          {
+            "name": "pf_bme",
+            "kind": "signal_out",
+            "cppType": "sc_core::sc_port<sc_core::sc_signal_inout_if<bool>, 0, (sc_core::sc_port_policy)1>"
+          },
+          {
+            "name": "pf_flr",
+            "kind": "signal_out",
+            "cppType": "sc_core::sc_port<sc_core::sc_signal_inout_if<bool>, 1, (sc_core::sc_port_policy)1>"
+          },
+          {
+            "name": "pf_vf_enable",
+            "kind": "signal_out",
+            "cppType": "sc_core::sc_port<sc_core::sc_signal_inout_if<bool>, 1, (sc_core::sc_port_policy)1>"
+          },
+          {
+            "name": "config_event",
+            "kind": "signal_out",
+            "cppType": "sc_core::sc_port<sc_core::sc_signal_inout_if<bool>, 1, (sc_core::sc_port_policy)1>"
+          },
+          {
+            "name": "bar0_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "vf_bar0_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "bar1_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "vf_bar1_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "bar2_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "vf_bar2_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "bar3_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "vf_bar3_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "bar4_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "vf_bar4_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "bar5_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          },
+          {
+            "name": "vf_bar5_initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "QemuInitiatorSocket<32u>"
+          }
+        ],
+        "params": [
+          {
+            "name": "bar0_is_64bits",
+            "type": "bool",
+            "default": false,
+            "description": "64 bits BAR pair"
+          },
+          {
+            "name": "bar0_prefetchable",
+            "type": "bool",
+            "default": false,
+            "description": "Prefetchable BAR"
+          },
+          {
+            "name": "bar0_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "bar0_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "bar1_is_64bits",
+            "type": "bool",
+            "default": false,
+            "description": "64 bits BAR pair"
+          },
+          {
+            "name": "bar1_prefetchable",
+            "type": "bool",
+            "default": false,
+            "description": "Prefetchable BAR"
+          },
+          {
+            "name": "bar1_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "bar1_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "bar2_is_64bits",
+            "type": "bool",
+            "default": false,
+            "description": "64 bits BAR pair"
+          },
+          {
+            "name": "bar2_prefetchable",
+            "type": "bool",
+            "default": false,
+            "description": "Prefetchable BAR"
+          },
+          {
+            "name": "bar2_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "bar2_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "bar3_is_64bits",
+            "type": "bool",
+            "default": false,
+            "description": "64 bits BAR pair"
+          },
+          {
+            "name": "bar3_prefetchable",
+            "type": "bool",
+            "default": false,
+            "description": "Prefetchable BAR"
+          },
+          {
+            "name": "bar3_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "bar3_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "bar4_is_64bits",
+            "type": "bool",
+            "default": false,
+            "description": "64 bits BAR pair"
+          },
+          {
+            "name": "bar4_prefetchable",
+            "type": "bool",
+            "default": false,
+            "description": "Prefetchable BAR"
+          },
+          {
+            "name": "bar4_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "bar4_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "bar5_is_64bits",
+            "type": "bool",
+            "default": false,
+            "description": "64 bits BAR pair"
+          },
+          {
+            "name": "bar5_prefetchable",
+            "type": "bool",
+            "default": false,
+            "description": "Prefetchable BAR"
+          },
+          {
+            "name": "bar5_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "bar5_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "class_id",
+            "type": "unsigned short",
+            "default": 65280,
+            "description": "Class ID"
+          },
+          {
+            "name": "devfn",
+            "type": "unsigned char",
+            "default": 255,
+            "description": "PCI devfn"
+          },
+          {
+            "name": "device_id",
+            "type": "unsigned short",
+            "default": 65535,
+            "description": "Device ID"
+          },
+          {
+            "name": "msi_64b",
+            "type": "bool",
+            "default": false,
+            "description": "MSI 64 bits"
+          },
+          {
+            "name": "msi_cap_offset",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "MSI cap offset (0: default)"
+          },
+          {
+            "name": "msi_nb_vectors",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "MSI vectors (0: disabled)"
+          },
+          {
+            "name": "msix_nb_vectors",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "MSI-X vectors (0: disabled)"
+          },
+          {
+            "name": "msix_pba_bar",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "MSI-X pba BAR"
+          },
+          {
+            "name": "msix_pba_offset",
+            "type": "unsigned int",
+            "default": 0,
+            "description": "MSI-X pba offset"
+          },
+          {
+            "name": "msix_table_bar",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "MSI-X table BAR"
+          },
+          {
+            "name": "msix_table_offset",
+            "type": "unsigned int",
+            "default": 0,
+            "description": "MSI-X table offset"
+          },
+          {
+            "name": "pasid_cap_offset",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "PASID cap offset (0: default)"
+          },
+          {
+            "name": "pasid_exec",
+            "type": "bool",
+            "default": false,
+            "description": "PASID execute permission support"
+          },
+          {
+            "name": "pasid_priv",
+            "type": "bool",
+            "default": false,
+            "description": "PASID privileged mod support"
+          },
+          {
+            "name": "pasid_width",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "PASID width (0: disabled)"
+          },
+          {
+            "name": "pcie_cap_offset",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "PCIe cap offset (0: default)"
+          },
+          {
+            "name": "pcie_type",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "PCIe type (default: endpoint type)"
+          },
+          {
+            "name": "pm_cap_offset",
+            "type": "unsigned char",
+            "default": 0,
+            "description": "PM cap offset (0: default)"
+          },
+          {
+            "name": "pm_capabilities",
+            "type": "unsigned short",
+            "default": 3,
+            "description": "PM capabilities"
+          },
+          {
+            "name": "pm_control_reset",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "PM control reset"
+          },
+          {
+            "name": "pm_enabled",
+            "type": "bool",
+            "default": false,
+            "description": "PM enabled"
+          },
+          {
+            "name": "revision",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "Revision"
+          },
+          {
+            "name": "sriov_cap_offset",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "SR-IOV cap offset (0: default)"
+          },
+          {
+            "name": "subsystem_id",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "Subsystem ID"
+          },
+          {
+            "name": "subsystem_vendor_id",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "Subsystem vendor ID"
+          },
+          {
+            "name": "vendor_id",
+            "type": "unsigned short",
+            "default": 65535,
+            "description": "Vendor ID"
+          },
+          {
+            "name": "vf_bar0_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "vf_bar0_stride",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "VF BAR stride"
+          },
+          {
+            "name": "vf_bar0_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "vf_bar1_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "vf_bar1_stride",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "VF BAR stride"
+          },
+          {
+            "name": "vf_bar1_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "vf_bar2_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "vf_bar2_stride",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "VF BAR stride"
+          },
+          {
+            "name": "vf_bar2_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "vf_bar3_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "vf_bar3_stride",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "VF BAR stride"
+          },
+          {
+            "name": "vf_bar3_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "vf_bar4_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "vf_bar4_stride",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "VF BAR stride"
+          },
+          {
+            "name": "vf_bar4_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "vf_bar5_size",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "BAR size, in bytes"
+          },
+          {
+            "name": "vf_bar5_stride",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "VF BAR stride"
+          },
+          {
+            "name": "vf_bar5_target_offset",
+            "type": "unsigned long",
+            "default": 0,
+            "description": "Offset in the backing memory region"
+          },
+          {
+            "name": "vf_device_id",
+            "type": "unsigned short",
+            "default": 65535,
+            "description": "VF device ID"
+          },
+          {
+            "name": "vf_nb",
+            "type": "unsigned short",
+            "default": 0,
+            "description": "VF max count (0: disabled)"
+          },
+          {
+            "name": "vf_offset",
+            "type": "unsigned short",
+            "default": 1,
+            "description": "First VF ID offset"
+          },
+          {
+            "name": "vf_stride",
+            "type": "unsigned short",
+            "default": 1,
+            "description": "VF ID stride"
+          }
+        ],
+        "subModules": [
+          "run-on-sysc (gs::runonsysc)",
+          "initiator_run_on_sysc_0 (gs::runonsysc)",
+          "initiator_run_on_sysc_1 (gs::runonsysc)",
+          "initiator_run_on_sysc_2 (gs::runonsysc)",
+          "initiator_run_on_sysc_3 (gs::runonsysc)",
+          "initiator_run_on_sysc_4 (gs::runonsysc)",
+          "initiator_run_on_sysc_5 (gs::runonsysc)",
+          "initiator_run_on_sysc_6 (gs::runonsysc)",
+          "initiator_run_on_sysc_7 (gs::runonsysc)",
+          "initiator_run_on_sysc_8 (gs::runonsysc)",
+          "initiator_run_on_sysc_9 (gs::runonsysc)",
+          "initiator_run_on_sysc_10 (gs::runonsysc)",
+          "initiator_run_on_sysc_11 (gs::runonsysc)"
+        ]
+      }
+    },
     "qemu_pl011": {
       "library": "qemu_pl011.so",
       "isContainer": false,
@@ -11999,97 +12868,6 @@
         "subModules": [
           "run_on_sysc_0 (gs::runonsysc)"
         ]
-      }
-    },
-    "qemu_rciep_pci": {
-      "library": "qemu_rciep_pci.so",
-      "isContainer": false,
-      "source": "qemu-components/pci/qemu_rciep_pci/src/qemu_rciep_pci.cc",
-      "args": [
-        {
-          "decl": "sc_core::sc_object*",
-          "kind": "object",
-          "expects": "QemuInstance"
-        },
-        {
-          "decl": "sc_core::sc_object*",
-          "kind": "object",
-          "expects": "qemu_gpex"
-        }
-      ],
-      "introspection": {
-        "status": "ok",
-        "cppType": "qemu_rciep_pci",
-        "ports": [],
-        "params": [
-          {
-            "name": "bar0_size",
-            "type": "unsigned long",
-            "default": 8388608,
-            "description": "PF BAR0 MMIO window size in bytes (8 MiB doorbell/comm-block aperture)"
-          },
-          {
-            "name": "class_id",
-            "type": "unsigned int",
-            "default": 4608,
-            "description": "PCI class code"
-          },
-          {
-            "name": "commblock_base",
-            "type": "unsigned long",
-            "default": 0,
-            "description": "System-bus base of the external comm-block component (BAR0 forward target)"
-          },
-          {
-            "name": "devfn",
-            "type": "unsigned int",
-            "default": 0,
-            "description": "PCI devfn (dev<<3 | fn)"
-          },
-          {
-            "name": "device_id",
-            "type": "unsigned int",
-            "default": 3338,
-            "description": "PCI Device ID"
-          },
-          {
-            "name": "num_msi_vectors",
-            "type": "unsigned int",
-            "default": 4,
-            "description": "MSI vectors advertised per PF (keep small vs platform IRQ pool, e.g. GICv2m 64 SPIs)"
-          },
-          {
-            "name": "num_vfs",
-            "type": "unsigned int",
-            "default": 8,
-            "description": "Number of SR-IOV VFs"
-          },
-          {
-            "name": "pf_shadow_base",
-            "type": "unsigned long",
-            "default": 0,
-            "description": "Reserved — not consumed yet (future config-monitor mirror)"
-          },
-          {
-            "name": "private_base",
-            "type": "unsigned long",
-            "default": 0,
-            "description": "Reserved — not consumed yet (future CPU-facing PRIVATE window)"
-          },
-          {
-            "name": "revision",
-            "type": "unsigned int",
-            "default": 0,
-            "description": "PCI revision ID"
-          },
-          {
-            "name": "vendor_id",
-            "type": "unsigned int",
-            "default": 6091,
-            "description": "PCI Vendor ID"
-          }
-        ],
-        "subModules": []
       }
     },
     "qemu_tablet": {
@@ -12224,19 +13002,19 @@
           {
             "name": "MaxTime_ms",
             "type": "double",
-            "default": 0.0,
+            "default": 0,
             "description": "Maximum run time in ms (0=no limit)"
           },
           {
             "name": "RTquantum_ms",
             "type": "double",
-            "default": 100.0,
+            "default": 100,
             "description": "Real time quantum in milliseconds"
           },
           {
             "name": "SCTimeout_ms",
             "type": "double",
-            "default": 0.0,
+            "default": 0,
             "description": "Timeout for SystemC in milliseconds"
           }
         ],
@@ -12588,6 +13366,43 @@
         "subModules": [
           "run_on_sysc_0 (gs::runonsysc)"
         ]
+      }
+    },
+    "signal_tracer": {
+      "library": "probes.so",
+      "isContainer": false,
+      "source": "systemc-components/probes/src/probes.cc",
+      "args": [],
+      "introspection": {
+        "status": "ok",
+        "cppType": "signal_tracer",
+        "ports": [
+          {
+            "name": "in",
+            "kind": "signal_in",
+            "cppType": "TargetSignalSocket<bool>"
+          },
+          {
+            "name": "out",
+            "kind": "signal_out",
+            "cppType": "sc_core::sc_port<sc_core::sc_signal_inout_if<bool>, 1, (sc_core::sc_port_policy)1>"
+          }
+        ],
+        "params": [
+          {
+            "name": "label",
+            "type": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >",
+            "default": "",
+            "description": "Name shown for this trace point (the source of the signal)"
+          },
+          {
+            "name": "record",
+            "type": "bool",
+            "default": true,
+            "description": "Record from the start; trace.setPoints turns it on and off while running"
+          }
+        ],
+        "subModules": []
       }
     },
     "smmu500": {
@@ -24585,6 +25400,57 @@
         "subModules": []
       }
     },
+    "tracer": {
+      "library": "probes.so",
+      "isContainer": false,
+      "source": "systemc-components/probes/src/probes.cc",
+      "args": [],
+      "introspection": {
+        "status": "ok",
+        "cppType": "tracer",
+        "ports": [
+          {
+            "name": "target_socket",
+            "kind": "tlm_target",
+            "busWidth": 32,
+            "cppType": "tlm_utils::simple_target_socket<tracer, 32u, tlm::tlm_base_protocol_types>"
+          },
+          {
+            "name": "initiator_socket",
+            "kind": "tlm_initiator",
+            "busWidth": 32,
+            "cppType": "tlm_utils::simple_initiator_socket<tracer, 32u, tlm::tlm_base_protocol_types>"
+          }
+        ],
+        "params": [
+          {
+            "name": "allow_dmi",
+            "type": "bool",
+            "default": false,
+            "description": "Let initiators use DMI. Accesses through DMI bypass the tracer, so only allow it for memories whose accesses you do not need to see. While the probe records, DMI is refused anyway."
+          },
+          {
+            "name": "label",
+            "type": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >",
+            "default": "",
+            "description": "Name shown for this trace point (module.port of the device)"
+          },
+          {
+            "name": "record",
+            "type": "bool",
+            "default": true,
+            "description": "Record from the start; trace.setPoints turns it on and off while running"
+          },
+          {
+            "name": "router",
+            "type": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >",
+            "default": "",
+            "description": "The router in front of this tracer, as the platform names it (to tell who issued an access); empty: the only router"
+          }
+        ],
+        "subModules": []
+      }
+    },
     "traffic_gen": {
       "library": "perf.so",
       "isContainer": false,
@@ -24623,7 +25489,7 @@
           {
             "name": "duration_ns",
             "type": "double",
-            "default": 0.0,
+            "default": 0,
             "description": "Stop issuing after this long, in ns (0: no limit)"
           },
           {
@@ -24653,13 +25519,13 @@
           {
             "name": "rate_mbps",
             "type": "double",
-            "default": 0.0,
+            "default": 0,
             "description": "Offered load in MB/s (1 MB = 10^6 bytes); 0: as fast as max_outstanding allows"
           },
           {
             "name": "read_ratio",
             "type": "double",
-            "default": 1.0,
+            "default": 1,
             "description": "Share of reads, 0 to 1 (the rest are writes)"
           },
           {
@@ -24683,7 +25549,7 @@
           {
             "name": "start_ns",
             "type": "double",
-            "default": 0.0,
+            "default": 0,
             "description": "When to start, in ns"
           },
           {
@@ -25377,6 +26243,12 @@
         "cppType": "vnc",
         "ports": [],
         "params": [
+          {
+            "name": "egl_headless",
+            "type": "bool",
+            "default": false,
+            "description": "Use the EGL headless rendering"
+          },
           {
             "name": "gpu_output",
             "type": "int",

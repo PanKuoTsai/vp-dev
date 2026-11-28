@@ -45,6 +45,11 @@ async function cmdSaveCheckpoint() {
   });
   if (!name) return;
   const dir = path.join(root, name);
+  if (fs.existsSync(dir) && checkpoint.inUseBy(dir, shared.runningOverrides)) {
+    // Started from this checkpoint, the simulation runs on its disk copies (dir/run): replacing it would delete them.
+    vscode.window.showErrorMessage(`This simulation was started from checkpoint ${name} and runs on its disk copies, so it cannot replace it. Save under another name; to replace ${name}, start the platform without a checkpoint first.`);
+    return;
+  }
   if (fs.existsSync(dir)) {
     const ok = await vscode.window.showWarningMessage(`A checkpoint ${name} exists already.`, { modal: true }, 'Replace');
     if (ok !== 'Replace') return;
@@ -105,12 +110,15 @@ async function cmdStartFromCheckpoint(arg) {
     c,
   })), { title: `Start ${path.basename(uri.fsPath, common.SUFFIX)} from a checkpoint`, placeHolder: 'The guest goes on from where the checkpoint was saved; its disk images are copied first' });
   if (!pick) return;
-  const how = await vscode.window.showQuickPick([
-    { label: 'Start', debug: false },
-    { label: 'Start with Target Debug Port', debug: true, description: 'to attach a debugger' },
-  ], { title: `Start from ${pick.c.manifest.name}` });
-  if (!how) return;
-  await simUi.start(uri, how.debug, [], { restore: { dir: pick.c.dir, manifest: pick.c.manifest } });
+  // Probes and exception recording come with every start (vpStudio.probes.insertAll, vpStudio.exceptions.record).
+  const extras = await common.pickMany([
+    { label: 'Target debug port', id: 'debug', description: 'to attach a debugger' },
+    { label: 'Profiling', id: 'profile', description: 'samples where the CPUs spend their instructions' },
+    { label: 'Function trace', id: 'ftrace', description: 'records calls and returns while you record (slower)' },
+  ], { title: `Start from ${pick.c.manifest.name}: also turn on…`, placeHolder: 'Choose any, or none and press Enter to just start' });
+  if (!extras) return;
+  const on = (id) => extras.some((x) => x.id === id);
+  await simUi.start(uri, on('debug'), [], { restore: { dir: pick.c.dir, manifest: pick.c.manifest }, profile: on('profile'), ftrace: on('ftrace') });
 }
 
 exports.cmdSaveCheckpoint = cmdSaveCheckpoint;

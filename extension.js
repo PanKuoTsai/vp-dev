@@ -70,6 +70,8 @@ function activate(context) {
   reg('vpStudio.showPlatform', platformView.cmdShowPlatform);
   reg('vpStudio.addDebugConfigurations', debugUi.cmdAddDebugConfigs);
   reg('vpStudio.createExample', () => examplesUi.cmdCreateExample(context));
+  reg('vpStudio.createTutorial', remoteUi.localOnly('Create Tutorial Workspace', () => examplesUi.cmdCreateTutorial(context).catch((e) => vscode.window.showErrorMessage(`Could not create the tutorial: ${e.message}`))));
+  reg('vpStudio.trace.exportReplay', () => traceUi.cmdExportReplay().catch((e) => vscode.window.showErrorMessage(`Replay: ${e.message}`)));
   reg('vpStudio.perf.createExample', () => examplesUi.cmdPerfCreateExample(context).catch((e) => vscode.window.showErrorMessage(`Could not create the example: ${e.message}`)));
   reg('vpStudio.reveal', modulesTree.cmdReveal);
   reg('vpStudio.pause', agentUi.cmdPause);

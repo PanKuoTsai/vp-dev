@@ -172,6 +172,7 @@ $('clear').addEventListener('click', () => post({ type: 'clear' }));
 $('pchoose').addEventListener('click', () => post({ type: 'chooseProbes' }));
 $('export').addEventListener('click', () => post({ type: 'export' }));
 $('vcd').addEventListener('click', () => post({ type: 'exportVcd' }));
+$('replay').addEventListener('click', () => post({ type: 'exportReplay' }));
 $('badd').addEventListener('click', () => {
   // The address typed in the filter (which only filters the table) is the usual slip.
   if (!$('baddr').value.trim() && $('addr').value.trim()) {

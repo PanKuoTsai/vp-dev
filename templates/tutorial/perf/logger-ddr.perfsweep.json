@@ -1,0 +1,41 @@
+{
+  "platform": "logger-ddr.platform.json",
+  "description": "Act 4 of the VP Studio tutorial. The same 2 seconds of vplogger's run, replayed 1000 times faster into a DDR shared with a 6000 MB/s display and a CPU: before (fix1, an fsync per line) and after (fix2, buffered) the software fix, with a lightly and a heavily loaded CPU, and with the logger at the MAU's normal priority or above the CPU. Compare how many bytes the logger moves for its records, what DDR time that takes, and whether QoS changes the logger's latency or the display's bandwidth.",
+  "sweep": [
+    {
+      "param": "logger.replay",
+      "values": [
+        "${TOP}vplogger-fix1.replay.csv",
+        "${TOP}vplogger-fix2.replay.csv"
+      ]
+    },
+    {
+      "param": "cpu.max_outstanding",
+      "values": [
+        8,
+        32
+      ]
+    },
+    {
+      "param": "mau.masters.logger.priority",
+      "values": [
+        1,
+        4
+      ]
+    }
+  ],
+  "metrics": [
+    "initiators.logger.bytes",
+    "initiators.logger.latencyNs.p99",
+    "initiators.display.bandwidthMBps",
+    "initiators.cpu.bandwidthMBps",
+    "memories.ddr.dataBusUtilization",
+    "memories.ddr.rowHitRate"
+  ],
+  "checks": [
+    {
+      "metric": "initiators.display.bandwidthMBps",
+      "min": 5900
+    }
+  ]
+}

@@ -13,7 +13,11 @@ VP Studio's SystemC models, built with QBox like its other components:
   remote_bitbang JTAG port with an ADIv5 debug access port (AXI MEM-AP on the
   platform's router, APB-AP with a ROM table, per-core external debug
   registers and CTIs that halt and resume the CPUs), used by "Start
-  Simulation with OpenOCD Port".
+  Simulation with OpenOCD Port". With the cores' QEMU instance it gives
+  OpenOCD's aarch64 target core debug: it interprets the instructions
+  OpenOCD writes to EDITR, and does memory access mode, halting step, and
+  hardware and software breakpoints on QEMU's CPUs (functions looked up in
+  libqemu; nothing in QEMU or QBox changes).
 
 The shared singletons are defined in src/probes.cc, not inline in the header:
 QBox loads module libraries with RTLD_LOCAL, so inline ones would be

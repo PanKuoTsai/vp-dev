@@ -58,6 +58,22 @@ function loadProfileSymbols() {
   return shared.profileSymbols;
 }
 
+/** The user program's symbol file chosen for this platform (Program…), read once per change, or undefined. */
+function loadProgramSymbols() {
+  const uri = shared.profileState.uri;
+  const file = uri && shared.extContext && shared.extContext.workspaceState.get(`vpStudio.profileProgram.${uri.toString()}`);
+  if (!file) return undefined;
+  let mtime;
+  try { mtime = fs.statSync(file).mtimeMs; } catch (e) { return { file, error: 'not found' }; }
+  if (shared.profileProgram && shared.profileProgram.file === file && shared.profileProgram.mtime === mtime) return shared.profileProgram;
+  try {
+    shared.profileProgram = { file, mtime, symbols: elfsym.readSymbols(file) };
+  } catch (e) {
+    shared.profileProgram = { file, mtime, error: e.message };
+  }
+  return shared.profileProgram;
+}
+
 /**
  * KASLR offset of an arm64 Linux kernel: find the loaded image with the arm64
  * Image magic and read the kimage_vaddr it relocated at boot (lib/analysis/profile.js).
@@ -97,8 +113,10 @@ async function refreshProfile() {
     shared.profileState.offsetAt = Date.now();
   }
   const offset = shared.profileState.offset || 0n;
-  const sum = profile.summarize(res.blocks || [], fns, offset);
-  const warning = profile.symbolWarning(sum, !!(sym && sym.symbols)) || (sym && sym.error ? `Symbol file ${sym.file}: ${sym.error}` : '');
+  const prog = loadProgramSymbols();
+  const sum = profile.summarize(res.blocks || [], fns, offset, prog && prog.symbols ? prog.symbols.functions : []);
+  const warning = profile.symbolWarning(sum, !!(sym && sym.symbols)) || (sym && sym.error ? `Symbol file ${sym.file}: ${sym.error}` : '')
+    || (prog && prog.error ? `Program ${prog.file}: ${prog.error}` : '');
   shared.profileState.retry = !!warning; // the kernel may not have relocated itself yet when it was read
   const shown = res.cpus.filter((c) => shared.profileCpu === '' || String(c.cpu) === shared.profileCpu).reduce((s, c) => s + c.samples, 0);
   const text = !res.active ? '' : `${sum.total} samples${shared.profileCpu === '' ? '' : ` on cpu ${shared.profileCpu}`} (one every ${res.period} instructions, about ${(shown * res.period / 1e9).toFixed(2)} billion instructions) in the last ${res.seconds.toFixed(0)} s of host time` +
@@ -107,7 +125,7 @@ async function refreshProfile() {
     type: 'profile', active: res.active, problem: res.problem || (res.active ? '' : 'the simulation was not started with profiling'),
     enabled: res.enabled, cpus: res.cpus, total: sum.total, text, warning,
     stats: res.active ? { cpu: shared.profileCpu, period: res.period, instructions: shown * res.period, seconds: res.seconds, offset: offset ? `0x${offset.toString(16)}` : '' } : {},
-    symbolFile: sym ? path.basename(sym.file) : '', rows: sum.rows.slice(0, 300),
+    symbolFile: [sym ? path.basename(sym.file) : '', prog ? path.basename(prog.file) : ''].filter(Boolean).join(' + '), rows: sum.rows.slice(0, 300),
   });
 }
 
@@ -135,6 +153,18 @@ async function handleProfileMessage(m) {
     const picked = await vscode.window.showOpenDialog({ canSelectMany: false, title: 'Symbol file of the software to profile (for example vmlinux)' });
     if (!picked || !picked.length || !shared.profileState.uri) return;
     await shared.extContext.workspaceState.update(`vpStudio.profileSymbols.${shared.profileState.uri.toString()}`, picked[0].fsPath);
+  } else if (m.type === 'chooseProgram') {
+    const uri = shared.profileState.uri;
+    if (!uri) return;
+    const had = shared.extContext.workspaceState.get(`vpStudio.profileProgram.${uri.toString()}`);
+    if (had) {
+      const x = await vscode.window.showQuickPick([{ label: 'Choose another program…', v: 'choose' }, { label: `Stop using ${path.basename(had)}`, v: 'clear' }], { title: 'Program symbols for user-space samples' });
+      if (!x) return;
+      if (x.v === 'clear') { await shared.extContext.workspaceState.update(`vpStudio.profileProgram.${uri.toString()}`, undefined); await refreshProfile(); return; }
+    }
+    const picked = await vscode.window.showOpenDialog({ canSelectMany: false, title: 'A user program built at a fixed address (not position independent), with symbols: its functions name the user-space samples' });
+    if (!picked || !picked.length) return;
+    await shared.extContext.workspaceState.update(`vpStudio.profileProgram.${uri.toString()}`, picked[0].fsPath);
   }
   await refreshProfile();
 }

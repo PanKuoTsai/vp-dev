@@ -52,12 +52,14 @@ test('debug port (G-13): module wiring for the Ubuntu example and the OpenOCD co
   const t = dd.targets(d);
   assert.deepStrictEqual(t.cpus.map((c) => c.name), ['cpu_0', 'cpu_1', 'cpu_2', 'cpu_3', 'cpu_4', 'cpu_5', 'cpu_6', 'cpu_7']);
   assert.strictEqual(t.bus, 'router');
+  assert.strictEqual(t.qemu, 'qemu_inst');
   assert.deepStrictEqual(t.problems, []);
   // QBox's vp_debug_dap component (agent 0.14.0): no dylib, QBox finds it by the type name.
   const m = dd.dapModule(d, 3335);
   assert.strictEqual(m.dylib, undefined);
   assert.strictEqual(dd.dapModule(d, 3335, '/x/vp_sim_agent').dylib, '/x/vp_sim_agent'); // agent 0.13.0 carried it
-  assert.deepStrictEqual(m.params, { port: 3335, cpus: 8, midr: 0x414FD0B1 });
+  // qemu: the cores' QEMU instance by its SystemC name, for core debug.
+  assert.deepStrictEqual(m.params, { port: 3335, cpus: 8, midr: 0x414FD0B1, qemu: 'platform.qemu_inst' });
   assert.deepStrictEqual(m.ports.mem, { bind: 'router.target_socket' });
   assert.deepStrictEqual(m.ports.halt_7, { bind: 'cpu_7.halt' });
   const lua = core.generate(d, { extraModules: [m] });
@@ -69,6 +71,15 @@ test('debug port (G-13): module wiring for the Ubuntu example and the OpenOCD co
   const d2 = JSON.parse(JSON.stringify(d));
   d2.modules.resetctl = { type: 'keep_alive', ports: { out: { bind: 'cpu_2.halt' } } };
   assert.throws(() => dd.dapModule(d2, 1), /cpu_2\.halt is already connected/);
+  // CPUs in two QEMU instances: halting still works, core debug does not (no qemu parameter).
+  const d3 = JSON.parse(JSON.stringify(d));
+  d3.modules.qemu_inst2 = JSON.parse(JSON.stringify(d.modules.qemu_inst));
+  d3.modules.cpu_9 = Object.assign(JSON.parse(JSON.stringify(d.modules.cpu)), { args: ['&qemu_inst2'] });
+  delete d3.modules.cpu_9.count;
+  const t3x = dd.targets(d3);
+  assert.strictEqual(t3x.qemu, null);
+  assert.ok(t3x.problems.some((p) => /2 QEMU instances/.test(p)));
+  assert.strictEqual(dd.dapModule(d3, 1).params.qemu, undefined);
   // No Arm CPU: nothing to halt.
   assert.throws(() => dd.dapModule({ schemaVersion: '0.1', name: 'x', modules: { ram: { type: 'gs_memory' } } }, 1), /no Arm CPU/);
   // Where the probes come from, by agent version: QBox's components from 0.14.0, the agent's library before.
@@ -87,11 +98,16 @@ test('debug port (G-13): module wiring for the Ubuntu example and the OpenOCD co
   assert.ok(cfg.includes('remote_bitbang port 3335'));
   assert.ok(cfg.includes('jtag newtap vp cpu -irlen 4 -expected-id 0x4ba00477'));
   assert.ok(cfg.includes('target create vp.sys mem_ap -dap vp.dap -ap-num 0'));
-  assert.ok(cfg.includes(`cti create vp.cti1 -dap vp.dap -ap-num 1 -baseaddr 0x${dd.ctiBase(1).toString(16).toUpperCase()}`));
+  assert.ok(cfg.includes(`cti create vp.cti$k -dap vp.dap -ap-num 1 -baseaddr [expr {0x${dd.ctiBase(0).toString(16).toUpperCase()} + $k * 0x20000}]`));
   assert.strictEqual(dd.coreBase(1), 0x80030000);
   assert.strictEqual(dd.ctiBase(0), 0x80020000);
-  assert.ok(cfg.includes('set VP_CORES 2') && /proc vp_halt \{n\}/.test(cfg) && /proc vp_resume \{n\}/.test(cfg));
-  assert.ok(/proc vp_halt_all \{\}/.test(cfg) && /proc vp_resume_all \{\}/.test(cfg) && cfg.includes('vp.cti$k write GATE 3'));
+  assert.ok(cfg.includes('set VP_CORES 2') && /proc vp_status/.test(cfg));
+  // Core debug: an aarch64 target per core with its CTI, one SMP group, one gdb server (a thread per core).
+  assert.ok(cfg.includes('target create vp.cpu$k aarch64 -dap vp.dap -ap-num 1 -dbgbase [vp_core_base $k] -cti vp.cti$k -coreid $k -gdb-port [expr {$k == 0 ? 3333 : "disabled"}]'));
+  assert.ok(cfg.includes('vp.cpu$k configure -rtos hwthread') && cfg.includes('target smp {*}$vp_smp'));
+  assert.ok(cfg.includes('target create vp.dbg mem_ap -dap vp.dap -ap-num 1 -gdb-port disabled'));
+  assert.ok(!/vp_halt/.test(cfg)); // OpenOCD's own halt and resume now
+  assert.ok(cfg.includes('vp.cpu0 configure -event gdb-detach { resume }'));
   assert.ok(cfg.trim().endsWith('init'));
 });
 
@@ -222,6 +238,35 @@ test('debug layout: offer instructions-only disassembly only when nobody chose',
   assert.ok(ly.offerPlainDisassembly({ key: 'debug.disassemblyView.showSourceCode', defaultValue: true }));
   assert.ok(!ly.offerPlainDisassembly({ defaultValue: true, workspaceValue: true }));
   assert.ok(!ly.offerPlainDisassembly({ defaultValue: true, globalValue: false }));
+});
+
+test('conditional breakpoints: the line gdb stops at in the function\'s own code, not an inlined copy', () => {
+  const bp = require('../lib/debug/breakpoints');
+  // Linux 5.15 arm64_force_sig_fault: declared at traps.c:265, body at 267; two copies inlined into callers.
+  assert.strictEqual(bp.functionAddress({ value: '{void (int, int, unsigned long, const char *)} 0xffffc98ba1623470 <arm64_force_sig_fault>' }), 0xffffc98ba1623470n);
+  assert.strictEqual(bp.functionAddress({ value: 'void' }), undefined);
+  const ins = { bkpt: { number: '7', addr: '<MULTIPLE>', locations: [
+    { number: '7.1', addr: '0xffffc98ba1623488', func: 'arm64_force_sig_fault', file: 'traps.c', fullname: '/build/l/arch/arm64/kernel/traps.c', line: '267' },
+    { number: '7.2', addr: '0xffffc98ba1623604', func: 'arm64_force_sig_mceerr', fullname: '/build/l/arch/arm64/kernel/traps.c', line: '265' },
+    { number: '7.3', addr: '0xffffc98ba1624394', func: 'arm64_notify_die', fullname: '/build/l/arch/arm64/kernel/traps.c', line: '265' },
+  ] } };
+  assert.deepStrictEqual(bp.entryLine(ins, 0xffffc98ba1623470n), { file: '/build/l/arch/arm64/kernel/traps.c', line: 267 });
+  // As the CDT adapter returns it (gdb 15, seen 2026-11-27): the breakpoint and its locations in one array.
+  const cdt = { bkpt: [
+    { number: '4', type: 'breakpoint', enabled: 'n', addr: '<MULTIPLE>', 'original-location': 'arm64_force_sig_fault' },
+    { number: '4.1', addr: '0xffffc98ba1623470', func: 'arm64_force_sig_fault', fullname: '/build/l/arch/arm64/kernel/traps.c', line: '267' },
+    { number: '4.2', addr: '0xffffc98ba16235fc', func: 'arm64_force_sig_fault', fullname: '/build/l/arch/arm64/include/asm/current.h', line: '21' },
+    { number: '4.3', addr: '0xffffc98ba1624380', func: 'arm64_force_sig_fault', fullname: '/build/l/arch/arm64/kernel/traps.c', line: '268' },
+  ] };
+  assert.deepStrictEqual(bp.entryLine(cdt, 0xffffc98ba1623470n), { file: '/build/l/arch/arm64/kernel/traps.c', line: 267 });
+  assert.strictEqual(bp.breakpointNumber(cdt), '4');
+  assert.strictEqual(bp.breakpointNumber(ins), '7');
+  // One location.
+  assert.deepStrictEqual(bp.entryLine({ bkpt: { number: '3', addr: '0x1010', fullname: '/s/a.c', line: '12' } }, 0x1000n), { file: '/s/a.c', line: 12 });
+  // No location near the function's address, or no address: keep the declaration line.
+  assert.strictEqual(bp.entryLine(ins, 0x1000n), undefined);
+  assert.strictEqual(bp.entryLine(ins, undefined), undefined);
+  assert.strictEqual(bp.entryLine({}, 0x1000n), undefined);
 });
 
 test('conditional breakpoints: function lookup and hit counts as the CDT adapter takes them', () => {

@@ -25,15 +25,15 @@ expect it to take a long time.
 1. Copy the sim agent and catalog out of the image:
 
    ```sh
-   tools/container/extract.sh ~/.vp-studio/qbox-adfde7985eef
+   tools/container/extract.sh ~/.vp-studio/qbox-1dd01f4b1fbf
    ```
 
 2. Set the VS Code settings. Use absolute paths; `~` is not expanded.
 
    ```jsonc
    "vpStudio.executable": "/abs/path/to/vp-studio/tools/container/run.sh",
-   "vpStudio.simAgent.library": "/home/me/.vp-studio/qbox-adfde7985eef/sim_agent.so",
-   "vpStudio.catalog": "/home/me/.vp-studio/qbox-adfde7985eef/qbox-catalog.json"
+   "vpStudio.simAgent.library": "/home/me/.vp-studio/qbox-1dd01f4b1fbf/sim_agent.so",
+   "vpStudio.catalog": "/home/me/.vp-studio/qbox-1dd01f4b1fbf/qbox-catalog.json"
    ```
 
 3. Export `VP_QBOX_MOUNTS` with the absolute path of that directory, so the

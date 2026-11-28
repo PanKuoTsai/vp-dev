@@ -1,0 +1,114 @@
+{
+  "$schema": "../../../schemas/qbox-platform.schema.json",
+  "schemaVersion": "0.2",
+  "name": "logger-ddr",
+  "description": "Act 4 of the VP Studio tutorial: would faster memory or QoS help vplogger? The logger's storage DMA, replayed from the disk requests traced in the Ubuntu platform (one QueueNotify write per request, sized by the guest's own disk counters, 1000 times faster than traced), shares one DDR with a display that reads its frame buffer at 6000 MB/s and a CPU that misses its caches. The MAU (an at_bus) gives the CPU the higher priority and the display 6000 MB/s reserved; the logger gets nothing special. The replay files are written by the Transaction Trace panel's Replay button (vplogger-fix1.replay.csv, vplogger-fix2.replay.csv next to this file); examples come with the tutorial.",
+  "platform": {
+    "moduletype": "Container",
+    "params": {
+      "quantum_ns": 1000
+    }
+  },
+  "modules": {
+    "logger": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "vplogger's disk writes as the storage controller's DMA into DDR: replayed from the traced requests.",
+      "params": {
+        "replay": "${TOP}vplogger-fix1.replay.csv",
+        "max_outstanding": 8,
+        "label": "logger"
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "mau.target_socket"
+        }
+      }
+    },
+    "display": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "Display: reads its frame buffer in order at 6000 MB/s for 2 ms.",
+      "params": {
+        "address": "0x0",
+        "size": "0x2000000",
+        "pattern": "sequential",
+        "burst_bytes": 64,
+        "rate_mbps": 6000,
+        "max_outstanding": 16,
+        "count": 0,
+        "duration_ns": 2000000
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "mau.target_socket"
+        }
+      }
+    },
+    "cpu": {
+      "type": "traffic_gen",
+      "dylib": "perf",
+      "description": "CPU cache misses: random 64-byte accesses, 70% reads, for 2 ms.",
+      "params": {
+        "address": "0x40000000",
+        "size": "0x40000000",
+        "pattern": "random",
+        "read_ratio": 0.7,
+        "burst_bytes": 64,
+        "max_outstanding": 8,
+        "count": 0,
+        "duration_ns": 2000000,
+        "seed": 3
+      },
+      "ports": {
+        "initiator_socket": {
+          "bind": "mau.target_socket"
+        }
+      }
+    },
+    "mau": {
+      "type": "at_bus",
+      "dylib": "perf",
+      "description": "MAU: arbitrates the masters' accesses to the DDR; the CPU goes first (priority 3), the display has 6000 MB/s reserved, the logger nothing special.",
+      "params": {
+        "clock_mhz": 1000,
+        "data_bytes": 16,
+        "latency_cycles": 2,
+        "arbitration": "priority",
+        "target_queue": 8,
+        "input_queue": 16,
+        "masters": "cpu: priority=3; display: min_mbps=6000; logger: priority=1"
+      }
+    },
+    "ddr": {
+      "type": "dram_ctrl",
+      "dylib": "perf",
+      "description": "DDR4-3200 x64, 2 GiB.",
+      "params": {
+        "clock_mhz": 1600,
+        "data_bytes": 8,
+        "banks": 16,
+        "row_bytes": 8192,
+        "tRCD": 22,
+        "tCL": 22,
+        "tRP": 22,
+        "scheduler": "fr_fcfs",
+        "qos": true
+      },
+      "ports": {
+        "target_socket": {
+          "address": "0x0",
+          "size": "0x80000000",
+          "bind": "mau.initiator_socket"
+        }
+      }
+    },
+    "stats": {
+      "type": "perf_stats",
+      "dylib": "perf",
+      "params": {
+        "output": "logger-ddr.perf.json"
+      }
+    }
+  }
+}

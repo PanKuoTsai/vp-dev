@@ -37,6 +37,8 @@ module.exports = {
   qboxPanel: undefined,
   qboxForm: null,
   qboxDirty: { src: null, value: null },
+  // tools/qbox-pin/check-deps.sh for one preset: { preset, value (parseDeps()) | null, at }
+  qboxDeps: { preset: null, value: null, at: 0 },
 
   // askpassUi
   askpassServer: undefined, // { port, token, close } once started
@@ -78,6 +80,7 @@ module.exports = {
   profileState: {}, // { uri, offset (KASLR, BigInt), offsetAt }
   profileCpu: '',
   profileSymbols: undefined, // { file, mtime, symbols } | { file, error }
+  profileProgram: undefined, // the user program's symbols (Program…): { file, mtime, symbols } | { file, error }
 
   // registersUi
   registerTree: undefined,

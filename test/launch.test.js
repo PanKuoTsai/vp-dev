@@ -152,3 +152,37 @@ test('launch: Lua path and the agent module', () => {
   // A library built before the rename (vp_sim_agent.so) registered the old type name.
   assert.deepStrictEqual(launch.agentModule('/a/vp_sim_agent', 5000), { name: 'sim_agent', type: 'vp_sim_agent', dylib: '/a/vp_sim_agent', params: { port: 5000 } });
 });
+
+test('launch: the agent\'s plugin options (profile, function trace, exceptions) for Start Simulation and vp-run', () => {
+  const pin = require('../lib/setup/pin');
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
+  const plug = (v, want, d = doc) => launch.pluginOptions(d, v, want, pin.versionAtLeast);
+  const all = plug('0.16.0', { profile: true, ftrace: true, exceptions: true, ftraceBuffer: 1000 });
+  assert.deepStrictEqual(all.params, { exceptions: true, profile: true, ftrace: true, ftrace_buffer: 1000, plugin_qemu: 'qemu_inst' });
+  assert.deepStrictEqual(all.overrides, [{ instance: 'qemu_inst', param: 'qemu_args.-plugin', value: 'libidlinker.so,key=platform.sim_agent.profile_id' }]);
+  assert.strictEqual(all.exceptions, true);
+  assert.strictEqual(all.error, null);
+  // Nothing asked: nothing added.
+  assert.deepStrictEqual(plug('0.16.0', {}), { params: {}, overrides: [], exceptions: false, error: null });
+  // Exceptions need agent 0.15.0; before 0.16.0 there is no plugin_qemu.
+  assert.deepStrictEqual(plug('0.14.0', { exceptions: true }).params, {});
+  assert.deepStrictEqual(plug('0.15.0', { exceptions: true }).params, { exceptions: true });
+  // Two QEMU instances: an agent before 0.16.0 records no exceptions and refuses profiling.
+  const two = JSON.parse(JSON.stringify(doc));
+  two.modules.qemu_rt = JSON.parse(JSON.stringify(two.modules.qemu_inst));
+  assert.deepStrictEqual(plug('0.15.0', { exceptions: true }, two).params, {});
+  assert.match(plug('0.15.0', { profile: true }, two).error, /several QEMU instances needs sim agent 0.16.0/);
+  assert.strictEqual(plug('0.16.0', { profile: true }, two).params.plugin_qemu, 'qemu_inst');
+  const none = JSON.parse(JSON.stringify(doc));
+  delete none.modules.qemu_inst;
+  assert.match(plug('0.16.0', { ftrace: true }, none).error, /needs a QemuInstance/);
+  // vp-run turns them on from the command line, with the probes and --fail-on.
+  const o = vprun.parseArgs(['--exceptions', '--profile', '--ftrace', '--probes', '--fail-on', 'Segmentation fault|Kernel panic', '--fail-on', 'Oops', 'x.platform.json']);
+  assert.deepStrictEqual([o.exceptions, o.profile, o.ftrace, o.probes], [true, true, true, true]);
+  assert.deepStrictEqual(o.failOn.map((f) => f.source), ['Segmentation fault|Kernel panic', 'Oops']);
+  assert.ok(o.failOn[0].re.test('[  1.2] Kernel panic - not syncing'));
+  assert.throws(() => vprun.parseArgs(['--fail-on', '(', 'x']), /--fail-on/);
+  for (const flag of ['--exceptions', '--profile', '--ftrace', '--probes', '--fail-on']) assert.ok(vprun.USAGE.includes(flag), flag);
+  // Start Simulation uses the same function.
+  assert.ok(fs.readFileSync(path.join(__dirname, '..', 'src', 'simUi.js'), 'utf8').includes('launch.pluginOptions('));
+});

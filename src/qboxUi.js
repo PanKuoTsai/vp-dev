@@ -76,6 +76,26 @@ function qboxDirtyOf(src) {
   return null;
 }
 
+/**
+ * What the host lacks for QBox's build (tools/qbox-pin/check-deps.sh), per
+ * preset (the compiler). Runs in the background; null until it has answered.
+ * force: run again (Check again, after a failed build).
+ */
+function qboxDepsOf(preset, force = false) {
+  const d = shared.qboxDeps;
+  if (d.preset === preset && !force) return d.value;
+  shared.qboxDeps = { preset, value: force && d.preset === preset ? d.value : null, at: 0 };
+  const script = path.join(common.ROOT, 'tools', 'qbox-pin', 'check-deps.sh');
+  require('child_process').execFile('bash', [script, '--tsv', '--preset', String(preset || 'gcc')], { timeout: 30000 }, (err, out) => {
+    if (shared.qboxDeps.preset !== preset) return;
+    // Exit code 1 only says something is missing; the lines say what.
+    shared.qboxDeps.value = out && out.trim() ? qboxsetup.parseDeps(out) : null;
+    shared.qboxDeps.at = Date.now();
+    qboxPost();
+  });
+  return shared.qboxDeps.value;
+}
+
 function qboxStatus(src) {
   const lib = agentUi.simAgentLibrary({ quiet: true });
   return qboxsetup.inspect(src, { pin: qboxPin(), studioDir: common.ROOT, dirty: qboxDirtyOf(src), agentLib: lib ? lib + '.so' : null, cmakeTools: cmakeToolsState() });
@@ -107,7 +127,8 @@ function qboxPost() {
   const pinnedTargets = (pin.build && pin.build.libqemuTargets) || ['aarch64'];
   const targets = [...new Set([...pinnedTargets, ...((st.cache && st.cache.targets) || []), ...(shared.qboxForm.targets || [])])];
   const presets = st.presets.length ? st.presets : [{ name: (pin.build && pin.build.preset) || 'gcc', label: (pin.build && pin.build.preset) || 'gcc' }];
-  const check = qboxsetup.check(shared.qboxForm, st, { simulator: simUi.simulatorPath(undefined).exePath });
+  const deps = qboxDepsOf(shared.qboxForm.preset);
+  const check = qboxsetup.check(shared.qboxForm, st, { simulator: simUi.simulatorPath(undefined).exePath, deps });
   const script = path.join(common.ROOT, 'tools', 'qbox-pin', 'build-qbox.sh');
   const built = shared.qboxForm.src ? path.join(path.resolve(shared.qboxForm.src), 'build', 'platforms-vp') : '';
   shared.qboxPanel.webview.postMessage({
@@ -115,6 +136,7 @@ function qboxPost() {
     choices: { presets, targets, cache: qboxsetup.cacheChoices(shared.qboxForm.src, process.env.CPM_SOURCE_CACHE || '') },
     check, compilerChange: check.errors.some((e) => /cannot change the compiler/.test(e)),
     command: shared.qboxForm.src ? `bash ${qboxsetup.commandLine(qboxsetup.argsFor(shared.qboxForm, script))}` : '',
+    deps: deps ? { missing: deps.missing, install: deps.install, at: shared.qboxDeps.at } : null,
     running: qboxRun.running, last: qboxRun.last,
     simulator: path.resolve(simUi.simulatorPath(undefined).exePath), built,
   });
@@ -193,15 +215,29 @@ async function qboxMessage(m) {
     fs.writeFileSync(f, qboxsetup.cmakeToolsOffText(text));
     vscode.window.showInformationMessage(`CMake Tools no longer configures QBox by itself: set ${qboxsetup.CMAKE_TOOLS_OFF.join(', ')} to false in ${f}.`);
     qboxPost();
+  } else if (m.type === 'depsAgain') {
+    qboxDepsOf(shared.qboxForm.preset, true);
+    qboxPost();
+  } else if (m.type === 'copyDeps') {
+    const d = shared.qboxDeps.value;
+    if (d && d.install) {
+      await vscode.env.clipboard.writeText(d.install);
+      vscode.window.showInformationMessage(`Copied: ${d.install}. Run it in a terminal on this host, then press Check again.`);
+    }
   } else if (m.type === 'build') {
-    await qboxBuild();
+    await qboxBuild({ skipDeps: !!m.skipDeps });
   }
 }
 
-async function qboxBuild() {
+async function qboxBuild(opts = {}) {
   const st = qboxStatus(shared.qboxForm.src);
-  const check = qboxsetup.check(shared.qboxForm, st, { simulator: simUi.simulatorPath(undefined).exePath });
+  const deps = opts.skipDeps ? null : qboxDepsOf(shared.qboxForm.preset);
+  const check = qboxsetup.check(shared.qboxForm, st, { simulator: simUi.simulatorPath(undefined).exePath, deps });
   if (check.errors.length || qboxRun.running) { qboxPost(); return; }
+  if (opts.skipDeps) {
+    const ok = await vscode.window.showWarningMessage('Build without checking the host\'s packages?', { modal: true, detail: 'Use this when the check is wrong for this host (for example, libraries installed where pkg-config does not look). If a package is really missing, CMake or libqemu\'s configure stops with an error.' }, 'Build Anyway');
+    if (ok !== 'Build Anyway') return;
+  }
   if (menuUi.ctxState['vpStudio.running']) {
     const pick = await vscode.window.showWarningMessage(
       'A simulation is running. Building QBox replaces libraries it has loaded, which can crash it.', { modal: true }, 'Stop and Build', 'Build Anyway');
@@ -209,7 +245,7 @@ async function qboxBuild() {
     if (pick === 'Stop and Build') await vscode.commands.executeCommand('vpStudio.stop');
   }
   const form = JSON.parse(JSON.stringify(shared.qboxForm));
-  const args = qboxsetup.argsFor(form, path.join(common.ROOT, 'tools', 'qbox-pin', 'build-qbox.sh'));
+  const args = qboxsetup.argsFor(form, path.join(common.ROOT, 'tools', 'qbox-pin', 'build-qbox.sh'), { skipDeps: !!opts.skipDeps });
   const task = new vscode.Task({ type: 'shell', tool: 'qbox' }, vscode.TaskScope.Workspace, 'Build QBox', 'VP Studio',
     new vscode.ShellExecution('bash', args, { cwd: common.taskCwd(form.src), env: { ELECTRON_RUN_AS_NODE: '' } }), []);
   task.presentationOptions = { reveal: vscode.TaskRevealKind.Always, clear: true };
@@ -241,6 +277,7 @@ async function qboxBuild() {
     if (agentHere) await cmdBuildSimAgent();
   } else {
     qboxRun.last = { code, at: Date.now(), text: 'see the terminal' };
+    qboxDepsOf(form.preset, true); // a package may be what failed
     vscode.window.showErrorMessage(`Building QBox failed (exit code ${code}); see the terminal.`);
   }
   qboxPost();

@@ -41,6 +41,9 @@ Options:
   --sim-timeout TIME   fail once simulated time reaches TIME, e.g. "30 s" (needs the sim agent)
   --wait-exit          after the steps, wait for the simulator to end by itself
                        (for example after --send poweroff) instead of stopping it
+  --fail-on REGEX      fail as soon as the console output matches REGEX, instead of waiting for an
+                       --expect until the timeout (for example "Segmentation fault|Kernel panic");
+                       repeatable
   --exec CMD           after the steps, run CMD (with sh -c); its exit code decides the result.
                        It gets VP_AGENT_HOST, VP_AGENT_PORT and the platform's host ports
                        (VP_HOST_PORT_SSH for HOST_PORT_SSH, and so on) in its environment
@@ -51,6 +54,13 @@ Options:
                        copied to DIR/run first; with --snapshot the checkpoint's own are opened
                        with snapshot=on instead (nothing copied, nothing kept)
   --param INST.NAME=VALUE  set a module parameter for this run (VALUE as JSON, or a string)
+  --probes             insert every transaction and signal probe of the platform, not recording
+                       (trace.setPoints and trace.read for --exec; as Start Simulation does)
+  --exceptions         record exceptions and interrupts in the sim agent (exc.* for --exec;
+                       needs sim agent 0.15.0)
+  --profile            turn on the sim agent's sampling profiler (profile.* for --exec)
+  --ftrace             turn on the sim agent's function trace (ftrace.* for --exec; recording
+                       starts with ftrace.setEnabled)
   --agent PATH|none    sim agent library (default: $VP_SIM_AGENT, then VP Studio's build folders)
   --agent-port N       port for the sim agent (default: a free one)
   --dtc PATH           device tree compiler, when the platform sets devicetree.output (default: dtc)
@@ -91,6 +101,7 @@ function parseArgs(argv) {
     exportKit: undefined, omit: [], omitLarger: undefined, urls: {}, allowMissing: false,
     importKit: undefined, into: '.', overwrite: false, saveCheckpoint: undefined, restore: undefined,
     perf: false, perfSweep: undefined, out: undefined, jobs: undefined,
+    exceptions: false, profile: false, ftrace: false, probes: false, failOn: [],
   };
   const need = (i, name) => {
     if (i + 1 >= argv.length) throw new UsageError(`${name} needs a value`);
@@ -111,6 +122,11 @@ function parseArgs(argv) {
         break;
       }
       case '--send': o.steps.push({ send: need(i++, a) }); break;
+      case '--fail-on': {
+        const v = need(i++, a);
+        try { o.failOn.push({ re: new RegExp(v, 'm'), source: v }); } catch (e) { throw new UsageError(`--fail-on ${v}: ${e.message}`); }
+        break;
+      }
       case '--send-env': {
         const name = need(i++, a);
         if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new UsageError(`--send-env ${name}: not an environment variable name`);
@@ -127,6 +143,10 @@ function parseArgs(argv) {
       case '--wait-exit': o.waitExit = true; break;
       case '--exec': o.exec = need(i++, a); break;
       case '--snapshot': o.snapshot = true; break;
+      case '--exceptions': o.exceptions = true; break;
+      case '--profile': o.profile = true; break;
+      case '--ftrace': o.ftrace = true; break;
+      case '--probes': o.probes = true; break;
       case '--save-checkpoint': o.saveCheckpoint = need(i++, a); break;
       case '--restore': o.restore = need(i++, a); break;
       case '--param': {
@@ -514,7 +534,8 @@ async function run(o, log = (s) => process.stderr.write(`vp-run: ${s}\n`)) {
     log(e.message);
     return EXIT.SETUP;
   }
-  const needs = o.simTimeout ? '--sim-timeout' : o.exec ? '--exec' : o.saveCheckpoint ? '--save-checkpoint' : o.restore ? '--restore' : null;
+  const needs = o.simTimeout ? '--sim-timeout' : o.exec ? '--exec' : o.saveCheckpoint ? '--save-checkpoint' : o.restore ? '--restore'
+    : o.exceptions ? '--exceptions' : o.profile ? '--profile' : o.ftrace ? '--ftrace' : o.probes ? '--probes' : null;
   if (!agent.lib && needs) {
     log(`the sim agent is needed for ${needs}, but it is ${agent.why}`);
     return EXIT.SETUP;
@@ -553,6 +574,40 @@ async function run(o, log = (s) => process.stderr.write(`vp-run: ${s}\n`)) {
   const agentPort = agent.lib ? (o.agentPort || await simagent.freePort()) : undefined;
   const buses = analysis.routers;
   if (agent.lib) options.extraModules = [launch.agentModule(agent.lib, agentPort, buses, restorePlan ? restorePlan.agentParams : {})];
+  if (agent.lib && (o.exceptions || o.profile || o.ftrace)) {
+    const version = pin.agentVersion(agent.lib + '.so');
+    if (o.exceptions && !pin.versionAtLeast(version, '0.15.0')) {
+      log(`--exceptions needs sim agent 0.15.0 or later (this one is ${version || 'older'}); rebuild it (tools/sim-agent/build.sh <qbox>/build)`);
+      return EXIT.SETUP;
+    }
+    const plug = launch.pluginOptions(doc, version, { profile: o.profile, ftrace: o.ftrace, exceptions: o.exceptions }, pin.versionAtLeast);
+    if (plug.error) {
+      log(plug.error);
+      return EXIT.SETUP;
+    }
+    Object.assign(options.extraModules[0].params, plug.params);
+    options.overrides.push(...plug.overrides);
+  }
+  if (agent.lib && o.probes) {
+    const version = pin.agentVersion(agent.lib + '.so');
+    const trace = require('../lib/analysis/trace');
+    const libs = trace.probeLibraries(version, agent.lib, pin.versionAtLeast);
+    const build = path.dirname(exe);
+    if (libs.inQbox && !fs.existsSync(path.join(build, 'probes.so'))) {
+      log(`--probes: QBox's build (${build}) has no probes.so; build it there: cmake --build ${build} --target probes`);
+      return EXIT.SETUP;
+    }
+    const ids = trace.probeList(doc, catalog).map((p) => p.id);
+    try {
+      const t = trace.traceOptions(doc, ids, libs.probes, catalog, { recording: [], router: pin.versionAtLeast(version, '0.12.0'), types: libs.types });
+      options.extraModules.push(...t.extraModules);
+      options.portOverrides = t.portOverrides;
+      log(`probes: ${ids.join(', ')} (not recording)`);
+    } catch (e) {
+      log(`--probes: ${e.message}`);
+      return EXIT.SETUP;
+    }
+  }
   let lua;
   try {
     lua = core.generate(doc, options);
@@ -605,11 +660,27 @@ async function run(o, log = (s) => process.stderr.write(`vp-run: ${s}\n`)) {
 
   const deadline = started + o.timeout * 1000;
   /** Wait until test() is true. Resolves 'ok', 'timeout', 'exited', 'interrupted' or 'simlimit'. */
+  // --fail-on: the first pattern the console output matches, kept once found.
+  let failedOn = null;
+  const failOnHit = () => {
+    if (failedOn) return true;
+    for (const f of o.failOn) {
+      const m = f.re.exec(consoleText);
+      if (m) {
+        const start = consoleText.lastIndexOf('\n', m.index) + 1;
+        const end = consoleText.indexOf('\n', m.index);
+        failedOn = { source: f.source, line: consoleText.slice(start, end < 0 ? undefined : end).replace(/\s+$/, '') };
+        return true;
+      }
+    }
+    return false;
+  };
   const waitFor = (test) => new Promise((resolve) => {
     let timer;
     const check = () => {
       let r;
-      if (test()) r = 'ok';
+      if (failOnHit()) r = 'failon';
+      else if (test()) r = 'ok';
       else if (interrupted) r = 'interrupted';
       else if (simLimitHit) r = 'simlimit';
       else if (exited) r = 'exited';
@@ -631,6 +702,7 @@ async function run(o, log = (s) => process.stderr.write(`vp-run: ${s}\n`)) {
     exited: `the simulator ended (${exited && (exited.signal || 'exit code ' + exited.code)}) ${what}`,
     interrupted: `interrupted ${what}`,
     simlimit: `simulated time reached ${o.simTimeout && o.simTimeout.text} ${what}`,
+    failon: `the console printed /${failedOn && failedOn.source}/ ("${failedOn && failedOn.line}") ${what}`,
   })[r];
   const fail = (r) => (r === 'exited' ? EXIT.SIM : EXIT.FAIL);
 
@@ -795,4 +867,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { parseArgs, junitXml, agentLibrary, envName, run, exportKitCmd, importKitCmd, perfCmd, perfSweepCmd, EXIT, UsageError };
+module.exports = { parseArgs, junitXml, agentLibrary, envName, run, exportKitCmd, importKitCmd, perfCmd, perfSweepCmd, EXIT, UsageError, USAGE };

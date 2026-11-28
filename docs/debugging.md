@@ -73,7 +73,7 @@ QEMU 把每顆 CPU 回報成一個 thread（`CPU#0 [halted]` 到 `CPU#7`）。
 | 指令 | 反組譯檢視中位址左側 | — | — | 未實測 |
 | 資料（watchpoint） | Memory Inspector 表格按右鍵 Break on Value Change 等 | — | — | 經 QEMU gdbstub 的 watchpoint，未實測 |
 
-**VP Studio: Add Conditional Breakpoint…**（Debug 組、「中斷點」檢視標題列）：輸入函式名稱、條件、命中次數。VP Studio 以 gdb 的 `-symbol-info-functions` 找到函式所在的檔案與行號，改設成那一行的原始碼行中斷點，所以條件與命中次數有效，也不需要本機有原始碼。需要先暫停（gdb 查詢需要停住的目標）。同名的 static 函式在多個檔案時會讓你選。
+**VP Studio: Add Conditional Breakpoint…**（Debug 組、「中斷點」檢視標題列）：輸入函式名稱、條件、命中次數。VP Studio 以 gdb 的 `-symbol-info-functions` 找到函式所在的檔案，再問 gdb `break <函式>` 會停在函式本體的哪一行（宣告的那一行可能只對應到被 inline 進別的函式的副本，例如 Linux 5.15 的 `arm64_force_sig_fault`：宣告在 265 行，`do_page_fault` 呼叫的本體從 267 行開始），改設成那一行的原始碼行中斷點，所以條件與命中次數有效，也不需要本機有原始碼。需要先暫停（gdb 查詢需要停住的目標）。同名的 static 函式在多個檔案時會讓你選。
 
 - **條件**：gdb 的 C 運算式，例如 `user_tick == 0`、`$x0 > 0x1000`、`$_streq(((struct task_struct *)$sp_el0)->comm, "bash")`。
 - **命中次數**：只接受數字。`5` 表示第 5 次命中時停一次，之後這個中斷點在 gdb 中就刪除了（「中斷點」檢視仍會列出，要再用請刪掉重設）；`>5` 表示第 6 次起每次都停。`>=5` 會換成 `>4`。CDT 以 gdb 的 ignore count 實作：略過的那幾次命中不檢查條件（依 gdb 手冊），之後的命中才依條件決定是否停。
@@ -126,7 +126,7 @@ Debug 組的第三段，都經由附加中的除錯器（除了實體位址的�
   - 樣式：`"Linux version"`；`hex: d0 0d fe ed`（照順序的位元組，例如 device tree 檔頭）；數值 `0xd00dfeed`（照目標存放的方式，little-endian，寬度依位數；加 `:be` 為 big-endian）。
   - 結果列成清單：虛擬位址點了開在 Memory Inspector，實體位址點了複製位址（用 QEMU Monitor… 的 xp 看內容）。讀不到的區段跳過並計數。實測 Ubuntu 平台實體 64 MiB 約 7 秒。
 - **View Address as Type…**：把一個位址當成某個 C 型別看，加到「監看」裡展開成欄位，例如型別 `struct task_struct`、位址 `$SP_EL0`（arm64 Linux 目前的 task）或 `&init_task`。暫存器用 gdb 的名稱，系統暫存器是大寫（`$SP_EL0`，不是 `$sp_el0`）。
-- **Load Symbol File at Address…**：選一個 ELF（Linux 核心模組 `.ko`、函式庫、韌體），填它的 `.text` 載入位址（Linux 模組：客體中以 root 讀 `/sys/module/<名稱>/sections/.text`），等同 gdb 的 `add-symbol-file`。
+- **Load Symbol File at Address…**：選一個 ELF（Linux 核心模組 `.ko`、函式庫、韌體、使用者程式），填它的 `.text` 載入位址（Linux 模組：客體中以 root 讀 `/sys/module/<名稱>/sections/.text`），等同 gdb 的 `add-symbol-file`。以固定位址連結（非 PIE，ELF 類型 EXEC）的程式在連結時的位址執行，位址欄會自動填好它自己的 `.text`；它的符號只在它是那顆 CPU 上正在跑的行程時才對得上。
 - **CPU Stepping…**：「Only the selected CPU steps」等同 `set scheduler-locking step`：單步時其他 CPU 保持停住，按繼續則全部執行；「Every CPU runs」恢復預設。QEMU 的 gdbstub 不支援 non-stop 模式（實測），所以沒有「一顆停住、其他繼續跑」的選項；要個別停住核心請用 OpenOCD 埠的 CTI。
 - **QEMU Monitor…**：經 gdb 的 `monitor` 送 QEMU 的 monitor（HMP）指令，輸出開在唯讀的文件。預設項目：`info mtree -f`（每個位址空間的扁平記憶體映射，看 CPU 與裝置實際看到什麼）、`info mtree`、`info registers -a`、`info cpus`、`info qom-tree`、`xp`（**實體記憶體**，填位址）；Other… 可輸入任何指令。這版 libqemu 的 `info pic`、`info roms` 沒有輸出，`info tlb` 不能用。
 
@@ -195,3 +195,24 @@ Debug 組的第三段，都經由附加中的除錯器（除了實體位址的�
 實測（Ubuntu 平台，PL011 探針記錄中）：兩次暫停之間只有一筆 `cpu_6` 讀 UARTFR，被標出，點它時 Peripheral Registers 選到 UARTFR；以 Set Value 寫 UARTILPR 後顯示「0x0000_0005 ● was 0x0000_0000」、PL011 一行「1 changed」。閒置時 PL011 的暫存器在兩次停下之間沒有變（處理完輸入後回到相同狀態），這時不會有標記。
 
 說明：有附加除錯器時，停下以除錯器為準；agent 在單步後會晚約 0.2 秒報一次短暫的「執行中」，若以它為準會把剛比對好的值洗掉。
+
+## OpenOCD：經 JTAG 除錯埠（G-13）
+
+**Start Simulation with OpenOCD Port**（Debug 組）在平台加入 QBox 的 `debug_dap` 模組：模擬器開一個 OpenOCD `remote_bitbang` 的 TCP 埠，後面是 JTAG TAP、ADIv5 DAP、每顆核心的 Armv8 外部除錯暫存器與 CTI。不需要實體的 USB-JTAG 轉接板：OpenOCD 經 TCP 連到模擬器。VP Studio 在平台旁寫出 `debug/<平台>.openocd.cfg`，執行 `openocd -f debug/<平台>.openocd.cfg` 後：
+
+- `telnet localhost 4444`（或 `nc localhost 4444`）下 OpenOCD 的指令：`halt`、`resume`、`step`、`reg`、`reg pc`、`mdw <位址>`、`bp <位址> 4 [hw]`、`rbp all`、`targets`；`vp.sys mdw <實體位址>` 讀系統匯流排；`vp_status` 列出每顆核心的 EDSCR、EDPRSR。
+- gdb 連 OpenOCD 的 gdb server：`gdb-multiarch -ex "target extended-remote localhost:3333"`，每顆核心是一個 thread。gdb 斷開時核心繼續執行（設定檔的 `gdb-detach` 事件）。VP Studio 的 `tools/gdb/vp-linux.py` 也能用（`vp-kaslr`、`vp-ps`、`vp-dmesg`）：OpenOCD 沒有 VBAR_EL1，`vp-kaslr` 改由核心 CPU 的 PC 以 2 MiB 為單位找出 KASLR 位移。
+
+核心組成一個 SMP 群組：停一顆就全部停（CTI 交叉觸發）。經核心存取的記憶體（`mdw`、gdb）用該核心的虛擬位址；系統暫存器唯讀（QEMU 的 gdbstub 不寫系統暫存器）；只試過 MTTCG；沒有 watchpoint。不要同時用 OpenOCD 與 QEMU 自己的 gdbstub（`gdb_port`）除錯，兩者都會收到中斷點造成的停止。
+
+需要 VP Studio 0.2.10 起修補 0002 的 `debug_dap`（以 **Build QBox** 更新 QBox；Check QBox Version 會報舊版修補未套用）。舊版的 `debug_dap` 只能經 CTI 停住與恢復核心，OpenOCD 的 aarch64 目標讀不到暫存器。
+
+做法（細節在 QBox 的 `systemc-components/debug_dap/README.md`）：模型找到核心所屬的 QEMU instance（參數 `qemu`），以 libqemu 的函式直接操作 QEMU 的 CPU。停住的核心在自己的執行緒上等一個 QEMU work item（BQL 放開），所以 QBox 的 CPU 迴圈與 VM 重新啟動都不會讓它繼續跑，sim agent 的暫停與繼續也不影響它。OpenOCD 寫進 EDITR 的指令由模型解譯（DCC 傳輸、MRS／MSR、載入與儲存、DCPS／DRPS、barrier 與快取維護），另有 EDSCR.MA 記憶體存取模式、halting step（`cpu_single_step`）、硬體中斷點（DBGBVR／DBGBCR）與軟體中斷點（經核心寫入的 HLT #11 改成 QEMU 中斷點，記憶體內容不變）。
+
+實測（Ubuntu 平台 8 核心，OpenOCD 0.12.0，gdb 15）：
+- OpenOCD 的 `halt` 停住 8 顆核心，各核心的 pc、cpsr、x0、v0、ELR_EL1 與模型記錄的一致。`mdw`、`mdb` 經核心讀到核心程式碼。
+- `step` 每次前進一條指令（0.05 到 0.2 秒）；硬體中斷點與軟體中斷點都停在 `cpu_do_idle`，原本的指令仍在記憶體中。
+- gdb 經 OpenOCD 載入 vmlinux、`vp-kaslr` 找到位移，`hbreak __arm64_sys_newuname` 後在客體執行 `uname`，停在 sys.c:1306，呼叫堆疊到 `el0_svc`；`next`、`finish` 回到 `el0_svc_common`；`vp-ps` 列出行程，`uname` 在命中的核心上。
+- 與 sim agent 一起：OpenOCD 停住核心時 agent 暫停、繼續，核心仍停住、主控台沒有輸出；agent 暫停時 OpenOCD 照樣可以停住與恢復核心。
+
+限制：OpenOCD 的 gdb server 只單步它的「目前」thread（OpenOCD 對其他 thread 是假單步，回報完成但沒有執行），以 gdb 的 `thread N` 切換後下 `stepi` 不一定作用在該核心；從中斷點停下的 thread 開始單步則正常。OpenOCD 0.12 的 `mdd`（8 位元組）在 aarch64 目標上只讀 4 位元組，是 OpenOCD 本身的問題。

@@ -16,6 +16,8 @@
 #   --cpm-cache DIR   CPM source cache for QBox's dependencies, given to the
 #                     first configure as -DCPM_SOURCE_CACHE (default: QBox's
 #                     own choice: DEST/Packages when it exists, else build/_deps)
+#   --no-deps-check   do not check the host's tools and libraries first
+#                     (check-deps.sh) before cloning and configuring
 #
 # Results:
 #   DEST/build/platforms-vp          the simulator and its module libraries
@@ -41,6 +43,7 @@ cpm=""
 preset_opt=""
 patching=1
 checkout=1
+depscheck=1
 dest=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -52,19 +55,30 @@ while [ $# -gt 0 ]; do
     --preset) preset_opt="$2"; shift 2 ;;
     --no-patches) patching=0; shift ;;
     --no-checkout) checkout=0; shift ;;
-    -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+    --no-deps-check) depscheck=0; shift ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
     *) dest="$1"; shift ;;
   esac
 done
-[ -n "$dest" ] || { echo "usage: build-qbox.sh [--jobs N] [--targets LIST] [--preset NAME] [--cpm-cache DIR] [--no-patches] [--no-checkout] [--no-catalog] [--no-agent] DEST" >&2; exit 2; }
+[ -n "$dest" ] || { echo "usage: build-qbox.sh [--jobs N] [--targets LIST] [--preset NAME] [--cpm-cache DIR] [--no-patches] [--no-checkout] [--no-catalog] [--no-agent] [--no-deps-check] DEST" >&2; exit 2; }
 
+if [ "$depscheck" = 1 ] && ! command -v python3 >/dev/null 2>&1; then
+  bash "$here/check-deps.sh" --preset "${preset_opt:-gcc}"; exit 1
+fi
 pinval() { python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); v=eval("d"+sys.argv[2]); print(";".join(v) if isinstance(v,list) else v)' "$pin" "$1"; }
 repo="$(pinval '["qbox"]["repository"]')"
 commit="$(pinval '["qbox"]["commit"]')"
 preset="${preset_opt:-$(pinval '["build"]["preset"]')}"
 [ -n "$targets" ] || targets="$(pinval '["build"]["libqemuTargets"]')"
 mapfile -t patches < <(python3 -c 'import json,sys; [print(p) for p in json.load(open(sys.argv[1]))["qbox"]["patches"]]' "$pin")
+
+# Missing host packages would stop CMake or libqemu's configure halfway (after
+# cloning and downloading the dependencies); say all of them now.
+if [ "$depscheck" = 1 ]; then
+  echo "== checking the host's tools and libraries (check-deps.sh; --no-deps-check skips this)"
+  bash "$here/check-deps.sh" --preset "$preset" || exit 1
+fi
 
 echo "== QBox $commit from $repo"
 if [ ! -d "$dest/.git" ]; then

@@ -6,6 +6,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const core = require('../lib/platform/core');
 const trace = require('../lib/analysis/trace');
+const replay = require('../lib/analysis/replay');
 const traceview = require('../lib/webview/traceview');
 const shared = require('./shared');
 const crossUi = require('./crossUi');
@@ -165,6 +166,8 @@ async function handleTraceMessage(m) {
     if (!shared.agent) throw new Error('not connected to a simulation');
     showProbes(await shared.agent.request('trace.setPoints', { points: [m.name], recording: false }));
     await rememberProbes();
+  } else if (m.type === 'exportReplay') {
+    await cmdExportReplay();
   } else if (m.type === 'exportVcd') {
     const sig = shared.traceRecords.filter((r) => r.dir === 'S');
     if (!sig.length) {
@@ -190,6 +193,58 @@ async function handleTraceMessage(m) {
     await fs.promises.writeFile(target.fsPath, trace.toCsv(shared.traceRecords), 'utf8');
     vscode.window.showInformationMessage(`Exported ${shared.traceRecords.length} accesses to ${vscode.workspace.asRelativePath(target)}.`);
   }
+}
+
+/**
+ * Replay…: the accesses kept here as a traffic_gen replay file, for an
+ * architecture model (the perf models). Each access of one kind (a device's
+ * doorbell write, say) becomes a transfer whose size the user gives, at the
+ * time it was traced (optionally a window of it, faster).
+ */
+async function cmdExportReplay() {
+  const recs = shared.traceRecords;
+  if (!recs.length) { vscode.window.showInformationMessage('No accesses recorded yet. Record at a probe first (Probes…), then export.'); return; }
+  const gs = replay.groups(recs, 40);
+  const pick = await vscode.window.showQuickPick(gs.map((g) => ({
+    label: `${g.point}  ${g.dir === 'W' ? 'write' : 'read'} ${g.address}`, description: `${g.count} accesses`,
+    detail: 'Each of these accesses becomes one transfer in the replay (a device\'s doorbell or notify write marks a request)', g,
+  })).concat(Array.from(new Set(gs.map((g) => g.point))).map((point) => ({
+    label: `${point}  every access, as it is`, description: '', detail: 'Same direction, length and time; addresses moved into the model\'s range', g: { point, all: true },
+  }))), { title: 'Replay: which accesses?', matchOnDescription: true });
+  if (!pick) return;
+  const opts = { point: pick.g.point, base: 0x10000000n, span: 0x4000000n };
+  if (!pick.g.all) {
+    Object.assign(opts, { dir: pick.g.dir, address: pick.g.address });
+    const size = await vscode.window.showInputBox({
+      title: 'Replay: size of each transfer',
+      prompt: 'Bytes per request (e.g. 4096), or "total N": the bytes the device moved in all, spread over the requests (Linux: sectors written in /sys/block/<disk>/stat x 512, before and after)',
+      value: '4096', ignoreFocusOut: true,
+      validateInput: (v) => (/^\s*(total\s+)?\d+\s*$/i.test(v) && Number(v.replace(/\D/g, '')) > 0 ? undefined : 'a number of bytes, or total and a number'),
+    });
+    if (!size) return;
+    const n = Number(size.replace(/\D/g, ''));
+    if (/total/i.test(size)) opts.totalBytes = n; else opts.bytes = n;
+    opts.burst = 256;
+  }
+  const span = recs.length ? recs[recs.length - 1].time - recs[0].time : 0;
+  const when = await vscode.window.showQuickPick([
+    { label: 'As recorded', description: `${span.toFixed(3)} s`, w: null, scale: 1 },
+    { label: 'First 2 s, 1000 times faster', description: '2 ms in the model: a storage device 1000 times faster, and a short model run', w: 2, scale: 0.001 },
+    { label: 'Everything, 1000 times faster', description: `${(span * 1000).toFixed(1)} ms in the model`, w: null, scale: 0.001 },
+  ], { title: 'Replay: time' });
+  if (!when) return;
+  opts.window = when.w;
+  opts.timeScale = when.scale;
+  const dir = shared.runningPlatform ? path.dirname(shared.runningPlatform.fsPath) : ((vscode.workspace.workspaceFolders || [])[0] || { uri: { fsPath: '.' } }).uri.fsPath;
+  const target = await vscode.window.showSaveDialog({
+    defaultUri: vscode.Uri.file(path.join(dir, 'trace.replay.csv')), filters: { 'Replay file': ['csv'] },
+    title: 'Save the replay file (the replay parameter of a traffic_gen)',
+  });
+  if (!target) return;
+  let r;
+  try { r = replay.toReplay(recs, Object.assign(opts, { title: path.basename(target.fsPath) })); } catch (e) { vscode.window.showErrorMessage(`Replay: ${e.message}`); return; }
+  await fs.promises.writeFile(target.fsPath, r.text, 'utf8');
+  vscode.window.showInformationMessage(`Replay: ${r.count} ${pick.g.all ? 'accesses' : `requests of ${r.requestBytes} bytes`} over ${(r.spanNs / 1e6).toFixed(3)} ms (${(r.bytes / 1e6).toFixed(2)} MB) in ${vscode.workspace.asRelativePath(target)}. Use it as the replay parameter of a traffic_gen ("\${TOP}${path.basename(target.fsPath)}" next to the model's platform).`);
 }
 
 // Platform views showing their Transactions tab (uri strings). Only the view
@@ -380,3 +435,4 @@ exports.traceConnected = traceConnected;
 exports.traceDisconnected = traceDisconnected;
 exports.cmdChooseProbes = cmdChooseProbes;
 exports.cmdStartTrace = cmdStartTrace;
+exports.cmdExportReplay = cmdExportReplay;

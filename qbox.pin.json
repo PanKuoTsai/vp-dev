@@ -2,8 +2,9 @@
   "pinVersion": 1,
   "qbox": {
     "repository": "https://github.com/qualcomm/qbox.git",
-    "commit": "adfde7985eefe806ebd40b43f2516a5ac5cb5e51",
-    "date": "2026-11-13",
+    "tag": "v7.4.5",
+    "commit": "1dd01f4b1fbf8ecddf10093a992807369ea161ef",
+    "date": "2026-11-25",
     "patches": [
       "patches/qbox/0001-mttcg-register-woken-cpu.patch",
       "patches/qbox/0002-vp-studio-probes-debug-dap.patch",
@@ -11,7 +12,7 @@
     ]
   },
   "libqemu": {
-    "tag": "libqemu-v11.0-v0.17",
+    "tag": "libqemu-v11.0-v0.21",
     "note": "fetched by QBox's CMake into build/_deps/libqemu-src; the patches are applied there after configure",
     "patches": [
       "patches/libqemu/0001-register-device-vmstate.patch"
@@ -35,7 +36,7 @@
     {
       "platform": "templates/ubuntu-aarch64.platform.json",
       "result": "boots to login:",
-      "date": "2026-11-14"
+      "date": "2026-11-28"
     }
   ]
 }

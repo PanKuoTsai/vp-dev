@@ -226,3 +226,45 @@ test('probes: agent version next to the library', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'tools', 'sim-agent', 'sim_agent.cc'), 'utf8');
   assert.match(src, /^const char\* const AGENT_VERSION = "\d+\.\d+\.\d+";$/m);
 });
+
+test('replay: traced accesses as a traffic_gen replay file (as they are, or as requests of a size)', () => {
+  const rp = require('../lib/analysis/replay');
+  const rec = (seq, time, point, dir, address, length) => ({ seq, time, point, dir, address, length, data: '', value: '', status: 'ok', initiator: '' });
+  const recs = [
+    rec(1, 10.000, 'virtioblk_0.mem', 'W', '0x1c0d0050', 4), rec(2, 10.000, 'virtioblk_0.mem', 'R', '0x1c0d0060', 4),
+    rec(3, 10.002, 'virtioblk_0.mem', 'W', '0x1c0d0050', 4), rec(4, 10.002, 'virtioblk_0.mem', 'W', '0x1c0d0064', 4),
+    rec(5, 13.000, 'virtioblk_0.mem', 'W', '0x1c0d0050', 4), rec(6, 10.001, 'pl011_uart_0.target_socket', 'R', '0x9000018', 4),
+    rec(7, 10.001, 'pl011_uart_0.irq', 'S', '', 1),
+  ];
+  assert.deepStrictEqual(rp.groups(recs).map((g) => [g.point, g.dir, g.address, g.count])[0], ['virtioblk_0.mem', 'W', '0x1c0d0050', 3]);
+  assert.strictEqual(rp.groups(recs).some((g) => g.dir === 'S'), false);
+  // Equal counts: the write comes first.
+  const tie = [rec(1, 1, 'd', 'R', '0x60', 4), rec(2, 1, 'd', 'W', '0x50', 4)];
+  assert.deepStrictEqual(rp.groups(tie).map((g) => g.dir), ['W', 'R']);
+  // Each QueueNotify write as a 4 KiB DMA write, in 256-byte bursts, 1000 times faster, the first 2 s only.
+  const r = rp.toReplay(recs, { point: 'virtioblk_0.mem', dir: 'W', address: '0x1c0d0050', bytes: 4096, burst: 256, base: 0x10000000n, span: 0x2000n, timeScale: 0.001, window: 2 });
+  assert.strictEqual(r.count, 2);
+  assert.strictEqual(r.lines, 32);
+  assert.strictEqual(r.bytes, 8192);
+  const lines = r.text.split('\n').filter((l) => l && !l.startsWith('#'));
+  assert.strictEqual(lines[0], '0.0,W,0x10000000,256');
+  assert.strictEqual(lines[15], '0.0,W,0x10000f00,256');
+  assert.strictEqual(lines[16], '2000.0,W,0x10001000,256'); // 2 ms later in the trace, 2 µs in the replay
+  assert.ok(/^# traffic_gen replay file: time_ns,R\|W,address,length/.test(r.text));
+  assert.ok(/as a 4096-byte write \(a request\) in bursts of 256 bytes/.test(r.text), r.text.slice(0, 400));
+  // The span wraps: a third request starts again at base.
+  const w = rp.toReplay(recs, { point: 'virtioblk_0.mem', dir: 'W', address: '0x1c0d0050', bytes: 4096, base: 0x10000000n, span: 0x2000n });
+  assert.deepStrictEqual(w.text.split('\n').filter((l) => /^\d/.test(l)).map((l) => l.split(',')[2]), ['0x10000000', '0x10001000', '0x10000000']);
+  assert.strictEqual(w.spanNs.toFixed(0), '3000000000');
+  // totalBytes: the device's own count spread over every chosen request (before the window).
+  const t = rp.toReplay(recs, { point: 'virtioblk_0.mem', dir: 'W', address: '0x1c0d0050', totalBytes: 3 * 5000, burst: 256 });
+  assert.strictEqual(t.requestBytes, 5120); // 5000 rounded up to bursts
+  // As they are: direction, length and time kept, addresses from base by their offset.
+  const a = rp.toReplay(recs, { point: 'virtioblk_0.mem', base: 0x1000n });
+  assert.deepStrictEqual(a.text.split('\n').filter((l) => /^\d/.test(l)), [
+    '0.0,W,0x1000,4', '0.0,R,0x1010,4', '2000000.0,W,0x1000,4', '2000000.0,W,0x1014,4', '3000000000.0,W,0x1000,4']);
+  assert.throws(() => rp.toReplay(recs, { point: 'nothing' }), /no access in the trace matches/);
+  assert.throws(() => rp.toReplay(recs, { point: 'virtioblk_0.mem', bytes: 0 }), /bytes must be/);
+  assert.throws(() => rp.toReplay(recs, { point: 'virtioblk_0.mem', timeScale: 0 }), /timeScale/);
+  assert.throws(() => rp.toReplay(recs, { point: 'virtioblk_0.mem', bytes: 8192, span: 4096 }), /span is smaller/);
+});

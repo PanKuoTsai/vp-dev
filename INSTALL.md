@@ -8,7 +8,7 @@
 |---|---|
 | 作業系統 | Linux，已在 Ubuntu 24.04（x86-64）上驗證。Windows 11：獨立版（AppImage）只能在 WSL2 中執行，見第 10 節，沒有 Windows 原生的獨立版；或在 Windows 版 VS Code 安裝 .vsix、模擬在 Linux 主機或容器上執行，見第 12 節 |
 | VS Code | 1.75 以上 |
-| QBox 的建置相依套件 | 見 QBox 的 `scripts/install_dependencies.sh`（Ubuntu 24.04：`cmake g++ gcc git libasio-dev libelf-dev …`） |
+| QBox 的建置相依套件 | 見 QBox 的 `scripts/install_dependencies.sh`（Ubuntu 24.04：`cmake g++ gcc git libasio-dev libelf-dev …`）。`bash $VPS/tools/qbox-pin/check-deps.sh` 列出這台主機還缺哪些，並給出 `sudo apt install` 指令；Build QBox 與 `build-qbox.sh` 建置前也會先檢查 |
 | `dtc` | 產生 device tree 用：`sudo apt install device-tree-compiler` |
 | `gdb-multiarch` | 除錯目標軟體用：`sudo apt install gdb-multiarch` |
 | CDT GDB Debug Adapter | VS Code 擴充套件 `eclipse-cdt.cdt-gdb-vscode`，在 VS Code 中附加除錯用 |
@@ -18,12 +18,12 @@
 
 兩種形態，功能相同，擇一即可：
 
-- **獨立程式**（不需要 VS Code）：執行 `./VP-Studio-0.2.9-x86_64.AppImage ~/qbox`（需要 `libfuse2`）。已內建 CDT GDB Debug Adapter 與 JSON 語言支援。建置方式見 `theia/README.md`。
+- **獨立程式**（不需要 VS Code）：執行 `./VP-Studio-0.2.12-x86_64.AppImage ~/qbox`（需要 `libfuse2`）。已內建 CDT GDB Debug Adapter 與 JSON 語言支援。建置方式見 `theia/README.md`。
 
   在 Ubuntu 23.10、24.04 以後，直接執行會立刻中止，訊息是 `The SUID sandbox helper binary was found, but is not configured correctly`。這時要自己加上 `--no-sandbox`：
 
   ```sh
-  ./VP-Studio-0.2.9-x86_64.AppImage --no-sandbox ~/qbox
+  ./VP-Studio-0.2.12-x86_64.AppImage --no-sandbox ~/qbox
   ```
 
   原因：這些版本預設禁止一般使用者建立 user namespace（`kernel.apparmor_restrict_unprivileged_userns = 1`），Chromium 的沙箱因此改用 setuid 的 `chrome-sandbox`，而 AppImage 裡的檔案不可能屬於 root。用 `sysctl kernel.apparmor_restrict_unprivileged_userns` 檢查：值是 1 才需要加；Ubuntu 22.04、RHEL/Rocky、Fedora、Debian 等預設可直接執行。
@@ -55,7 +55,7 @@ VP Studio 的每個版本都對一個測試過的 QBox commit 驗證過，並附
 bash $VPS/tools/qbox-pin/build-qbox.sh ~/qbox
 ```
 
-需要網路（QBox 會下載 SystemC、CCI、libqemu）。4 核心的機器約 25 分鐘起跳；只需要 AArch64 時可加 `--targets aarch64` 縮短時間。
+開始前先以 `check-deps.sh` 檢查主機的工具與開發套件（cmake 3.21 以上、編譯器、ninja、Python venv、libelf、libzip、GLib、libfdt、asio，以及 libqemu 需要的 pixman、slirp、SDL2、epoxy、libjpeg、virglrenderer）；缺任何一個就列出套件名稱與安裝指令並停止，不會先 clone 和下載。確定檢查不準（例如函式庫裝在 pkg-config 找不到的地方）時可加 `--no-deps-check`。需要網路（QBox 會下載 SystemC、CCI、libqemu）。4 核心的機器約 25 分鐘起跳；只需要 AArch64 時可加 `--targets aarch64` 縮短時間。
 
 **B. 使用既有的 QBox 原始碼**：確認是同一個 commit（`git -C ~/qbox rev-parse HEAD` 與 `qbox.pin.json` 的 `commit` 相同），套用修補後再建置：
 
@@ -76,6 +76,8 @@ cmake --build build -j$(nproc)
 3. **相依套件的原始碼放哪裡**（CPM 原始碼快取 `CPM_SOURCE_CACHE`）：不使用快取（下載到 `build/_deps/`）、QBox 會自動使用的 `<qbox>/Packages`、既有的 `<qbox>/packages`、環境變數 `CPM_SOURCE_CACHE`，或自選資料夾。幾份 QBox 可以共用同一個快取。
 4. **VP Studio 的修補**：列出每個修補是否已套用，預設套用尚未套用的。
 5. **建置之後**：一併建 sim agent、讓 VP Studio 使用這份 QBox（設定 `vpStudio.executable`）。
+
+檢視開啟時會在背景檢查主機的套件（`check-deps.sh`，依 preset 檢查 gcc 或 clang）；上方「Host packages」顯示結果。缺套件時 Build 會停用，右側列出缺的項目與 `sudo apt install …` 指令：按 **Copy install command** 複製，在這台主機的終端機執行後按 **Check again**。確定檢查不準時，可按 **Build Anyway** 跳過檢查。
 
 右側列出將執行的指令（`tools/qbox-pin/build-qbox.sh` 與選項）與這次會改變什麼；按 **Build QBox** 在終端機執行。已經設定過的建置目錄，預設值就是它原本的設定，直接按 Build 只重編有變動的部分；改了 QEMU 目標、Release／Debug 或套件位置會先列出來。建置目錄不能換編譯器（gcc 與 clang 互換），這時檢視會擋下，並提供「Move the old build directory aside」把舊的移開。
 
@@ -131,6 +133,10 @@ cp -a Artifacts ~/qbox/platforms/ubuntu/fw/                          # 改成你
 1. 命令面板執行 **VP Studio: Create Example Platform (Ubuntu AArch64)**，存到 `platforms/ubuntu/`（`${TOP}` 指向這個目錄，位置很重要）。
 2. 開啟該 `.platform.json`，按編輯器右上角的 **Start Simulation**。8 核心約 3 到 4 分鐘開機到 `login:`。
 3. 要結束時，在客體輸入 `poweroff`。用 Stop Simulation 或 Ctrl-\ 直接結束雖然可以，但每次都會在客體留下一份未關閉的日誌，次數多了會把客體磁碟寫滿；VP Studio 在可用空間不足時會警告並說明清理方法。
+
+### 教學：從除錯到架構探索走一遍
+
+開機成功後，可以執行 **VP Studio: Create Tutorial Workspace**：在 `platforms/ubuntu/` 旁建立教學平台與 `vplogger-tutorial/TUTORIAL.md`，並（詢問後）把教學程式寫進磁碟映像的 `/opt/vplogger/`（需要 `debugfs`，Ubuntu 的 `e2fsprogs` 套件；模擬不能在執行中）。整份教學約 1.5 到 2 小時，用一支會當掉又很慢的程式，把除錯、追蹤、剖析、函式追蹤、比較、CI 與架構探索都用一次。不想留著時以 `bash vplogger-tutorial/install-vplogger.sh --uninstall <映像檔>` 移除。
 
 ## 7. 平台檔可以共用
 
@@ -241,15 +247,15 @@ VP Studio 與 QBox 都只在 Linux 上執行。Windows 上的做法是在 WSL2 �
 6. **執行獨立版**：把下載的 AppImage 從 Windows 複製進來（`<使用者>` 換成 Windows 的帳號名稱）再執行。視窗會出現在 Windows 桌面上：
 
    ```sh
-   cp /mnt/c/Users/<使用者>/Downloads/VP-Studio-0.2.9-x86_64.AppImage ~/
-   chmod +x ~/VP-Studio-0.2.9-x86_64.AppImage
-   ~/VP-Studio-0.2.9-x86_64.AppImage ~/qbox
+   cp /mnt/c/Users/<使用者>/Downloads/VP-Studio-0.2.12-x86_64.AppImage ~/
+   chmod +x ~/VP-Studio-0.2.12-x86_64.AppImage
+   ~/VP-Studio-0.2.12-x86_64.AppImage ~/qbox
    ```
 
    - 出現 FUSE 相關錯誤（例如 `dlopen(): error loading libfuse.so.2` 或 `fuse: device not found`）時，改成解開後執行：
 
      ```sh
-     cd ~ && ./VP-Studio-0.2.9-x86_64.AppImage --appimage-extract
+     cd ~ && ./VP-Studio-0.2.12-x86_64.AppImage --appimage-extract
      ~/squashfs-root/AppRun ~/qbox
      ```
 

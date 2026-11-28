@@ -70,35 +70,17 @@ function addAgentOptions(options, platform, { agentLib, agentVersion, agentPort,
       .then((x) => x && vscode.commands.executeCommand('vpStudio.buildSimAgent'));
     return undefined;
   }
-  // QBox's libidlinker plugin gives the agent a QEMU plugin id (G-05), valid in the one QEMU instance
-  // it is loaded into. Agents before 0.16.0 use the first instance they find, which can be another
-  // one: with several instances they crash, so recording exceptions is left off for them.
-  const qemus = core.analyze(platform.data).instances.filter((i) => i.type === 'QemuInstance');
-  const pluginQemu = pin.versionAtLeast(agentVersion, '0.16.0');
-  let exc = excUi.wanted(agentVersion, pin.versionAtLeast);
-  if (exc && qemus.length > 1 && !pluginQemu) exc = false;
-  if ((opts.profile || opts.ftrace) && qemus.length > 1 && !pluginQemu) {
-    vscode.window.showErrorMessage(`${opts.profile ? 'Profiling' : 'The function trace'} of a platform with several QEMU instances needs sim agent 0.16.0 or later (this one is ${agentVersion || 'older'}). Rebuild it with "VP Studio: Build Sim Agent".`);
+  // QBox's libidlinker plugin gives the agent a QEMU plugin id for profiling, the function trace and
+  // exception recording (launch.pluginOptions).
+  const plug = launch.pluginOptions(platform.data, agentVersion,
+    { profile: !!opts.profile, ftrace: !!opts.ftrace, exceptions: excUi.wanted(agentVersion, pin.versionAtLeast), ftraceBuffer: c.get('ftrace.bufferPerCpu') },
+    pin.versionAtLeast);
+  if (plug.error) {
+    vscode.window.showErrorMessage(`${plug.error}.${/0\.16\.0/.test(plug.error) ? ' Rebuild it with "VP Studio: Build Sim Agent".' : ''}`);
     return undefined;
   }
-  if (exc) options.extraModules[0].params.exceptions = true;
-  if (opts.profile || opts.ftrace || exc) {
-    const q = qemus[0];
-    if (!q && (opts.profile || opts.ftrace)) { vscode.window.showErrorMessage(`${opts.profile ? 'Profiling' : 'The function trace'} needs a QemuInstance in the platform.`); return undefined; }
-    if (!q) delete options.extraModules[0].params.exceptions;
-    if (opts.profile) options.extraModules[0].params.profile = true;
-    if (opts.ftrace) {
-      options.extraModules[0].params.ftrace = true;
-      const n = Number(c.get('ftrace.bufferPerCpu'));
-      if (Number.isInteger(n) && n > 0) options.extraModules[0].params.ftrace_buffer = n;
-    }
-    if (q) {
-      if (pluginQemu) options.extraModules[0].params.plugin_qemu = q.name;
-      options.overrides = (options.overrides || []).concat([
-        { instance: q.name, param: 'qemu_args.-plugin', value: `libidlinker.so,key=platform.${agentUi.AGENT_INSTANCE}.profile_id` },
-      ]);
-    }
-  }
+  Object.assign(options.extraModules[0].params, plug.params);
+  if (plug.overrides.length) options.overrides = (options.overrides || []).concat(plug.overrides);
   // The probes and the debug port: QBox components for agent 0.14.0, the agent's library before.
   const libs = trace.probeLibraries(agentVersion, agentLib, pin.versionAtLeast);
   const qboxHas = (file) => !libs.inQbox || !qboxBuild || fs.existsSync(path.join(qboxBuild, file));

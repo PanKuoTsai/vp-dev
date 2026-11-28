@@ -86,6 +86,12 @@ test('checkpoint: manifest, listing and how to start from it', () => {
   assert.deepStrictEqual(rp.copies, [{ from: path.join(dir, 'disk-virtioblk_0-0.img'), to: path.join(dir, 'run', 'disk-virtioblk_0-0.img') }]);
   assert.deepStrictEqual(rp.overrides, [{ instance: 'virtioblk_0', param: 'blkdev_str', value: `file=${path.join(dir, 'run', 'disk-virtioblk_0-0.img')},format=raw,if=none,readonly=off` }]);
   assert.deepStrictEqual(rp.agentParams, { restore_from: path.resolve(dir), restore_paused: false });
+  // A simulation started from it runs on dir/run: it must not replace (delete) that checkpoint.
+  assert.strictEqual(ck.inUseBy(dir, rp.overrides), true);
+  assert.strictEqual(ck.inUseBy(path.join(path.dirname(dir), 'other'), rp.overrides), false);
+  assert.strictEqual(ck.inUseBy(dir + 'x', rp.overrides), false);
+  assert.strictEqual(ck.inUseBy(dir, [{ instance: 'cpu_0', param: 'gdb_port', value: 1234 }]), false);
+  assert.strictEqual(ck.inUseBy(dir, undefined), false);
   // snapshot: the checkpoint's own image with snapshot=on, nothing copied.
   const rs = ck.restorePlan(manifest, dir, doc, { snapshot: true, paused: true });
   assert.deepStrictEqual(rs.copies, []);
@@ -96,4 +102,28 @@ test('checkpoint: manifest, listing and how to start from it', () => {
   const d3 = JSON.parse(text);
   delete d3.modules.virtioblk_0;
   assert.strictEqual(ck.restorePlan(manifest, dir, d3).problems[0].level, 'error');
+});
+
+testAsync('checkpoint: starting from a checkpoint refuses to copy over a disk another simulation runs on', async () => {
+  const ck = require('../lib/sim/checkpoint');
+  const disklock = require('../lib/sim/disklock');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-ck-busy-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'disk.img'), 'x');
+    fs.mkdirSync(path.join(dir, 'run'));
+    fs.writeFileSync(path.join(dir, 'run', 'disk.img'), 'old');
+    const rp = { copies: [{ from: path.join(dir, 'disk.img'), to: path.join(dir, 'run', 'disk.img') }] };
+    await assert.rejects(ck.prepare(rp, () => {}, { fileLocked: () => [{ pid: 42, cmd: 'platforms-vp' }] }), /in use by a simulation started from this checkpoint \(pid 42\); stop it first/);
+    assert.strictEqual(fs.readFileSync(path.join(dir, 'run', 'disk.img'), 'utf8'), 'old');
+    await ck.prepare(rp, () => {}, { fileLocked: () => null });
+    assert.strictEqual(fs.readFileSync(path.join(dir, 'run', 'disk.img'), 'utf8'), 'x');
+    // /proc/locks lines as QEMU's OFD locks show them: device in hex, inode in decimal.
+    const st = fs.statSync(path.join(dir, 'run', 'disk.img'));
+    const [major, minor] = disklock.devParts(st.dev);
+    const line = `1: OFDLCK ADVISORY  READ  -1 ${major.toString(16).padStart(2, '0')}:${minor.toString(16).padStart(2, '0')}:${st.ino} 100 100`;
+    assert.ok(Array.isArray(disklock.fileLocked(path.join(dir, 'run', 'disk.img'), { procLocks: line })));
+    assert.strictEqual(disklock.fileLocked(path.join(dir, 'run', 'disk.img'), { procLocks: '' }), null);
+    assert.strictEqual(disklock.fileLocked(path.join(dir, 'missing.img'), { procLocks: line }), null);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

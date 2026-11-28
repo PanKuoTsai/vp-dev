@@ -28,6 +28,8 @@ function draw() {
   const pr = st.products.slice(1).filter((p) => p.exists).length;
   const want = st.products.length - 1;
   stats.append(stat('VP Studio components', pr + ' / ' + want, st.products.slice(1).map((p) => p.file).join(', '), pr < want ? 'warn' : ''));
+  const dp = S.deps;
+  stats.append(stat('Host packages', !dp ? 'checking…' : dp.missing.length ? dp.missing.length + ' missing' : 'all present', !dp ? '' : dp.missing.length ? 'see Build' : 'tools and libraries QBox needs', dp && dp.missing.length ? 'warn' : ''));
   stats.append(stat('Sim agent', st.agent && st.agent.exists ? (st.agent.version || 'built') : 'not built', st.agent && st.agent.older ? 'older than probes.so: rebuild' : '', st.agent && st.agent.older ? 'warn' : ''));
   // 1 QBox folder
   if (document.activeElement !== $('src')) $('src').value = form.src || '';
@@ -85,13 +87,35 @@ function draw() {
   $('use-d').textContent = S.simulator === S.built ? 'VP Studio already uses ' + S.built + '.' : 'Sets vpStudio.executable to ' + S.built + ' (now ' + S.simulator + ').';
   // Build
   const msgs = $('msgs'); msgs.textContent = '';
-  for (const e of ch.errors) msgs.append(el('div', 'msg err', e));
+  const missing = dp && dp.missing.length ? dp.missing : null;
+  for (const e of ch.errors) {
+    if (missing && /^This host lacks/.test(e)) {
+      // The same error, with the list and the command to copy.
+      const box = el('div', 'msg err deps');
+      box.append(el('div', '', 'This host lacks what QBox\'s build needs:'));
+      const ul = el('ul', 'dlist');
+      for (const i of missing) {
+        const li = el('li');
+        li.append(el('span', 'mono', i.what));
+        li.append(el('span', 'd', i.state === 'old' ? i.note : 'package ' + i.pkg + (i.note ? ' · ' + i.note : '')));
+        ul.append(li);
+      }
+      box.append(ul);
+      if (dp.install) { box.append(el('div', '', 'Install them in a terminal on this host:')); box.append(el('pre', 'cmd', dp.install)); }
+      else box.append(el('div', '', 'Install them with your distribution\'s package manager (the names are Ubuntu\'s), or see QBox\'s scripts/install_dependencies.sh.'));
+      msgs.append(box);
+    } else msgs.append(el('div', 'msg err', e));
+  }
   for (const w of ch.warnings) msgs.append(el('div', 'msg warn', w));
   for (const c of ch.changes) msgs.append(el('div', 'msg chg', 'Changes ' + c + '.'));
   if (!ch.errors.length && !ch.warnings.length && !ch.changes.length) msgs.append(el('div', 'msg', ready ? 'Same settings as the build directory: builds what changed.' : st.kind === 'empty' ? 'First build: clones QBox and downloads its dependencies (network; about 20 minutes or more).' : 'First build of this QBox: configures and builds it (about 20 minutes or more).'));
   $('cmd').textContent = S.command || '';
   $('build').disabled = running || ch.errors.length > 0;
   $('move').hidden = !(S.compilerChange && !running);
+  $('deps-actions').hidden = !missing;
+  $('deps-copy').hidden = !(missing && dp.install);
+  // Build Anyway only when the packages are the only reason Build is off.
+  $('deps-skip').hidden = !(missing && ch.errors.length === 1) || running;
   $('cmt-off').hidden = !(st.cmakeTools && st.cmakeTools.auto.length);
   for (const b of document.querySelectorAll('button.run')) b.disabled = running;
   const last = $('last');
@@ -125,6 +149,9 @@ $('agent').addEventListener('change', () => { form.agent = $('agent').checked; s
 $('useForSim').addEventListener('change', () => { form.useForSim = $('useForSim').checked; send(); });
 $('build').addEventListener('click', () => post({ type: 'build' }));
 $('move').addEventListener('click', () => post({ type: 'moveBuild' }));
+$('deps-copy').addEventListener('click', () => post({ type: 'copyDeps' }));
+$('deps-again').addEventListener('click', () => post({ type: 'depsAgain' }));
+$('deps-skip').addEventListener('click', () => post({ type: 'build', skipDeps: true }));
 $('cmt-off').addEventListener('click', () => post({ type: 'cmakeToolsOff' }));
 for (const b of document.querySelectorAll('button.run')) b.addEventListener('click', () => post({ type: 'command', name: b.dataset.name }));
 post({ type: 'ready' });

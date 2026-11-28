@@ -47,11 +47,16 @@ input[type=number]{width:80px;background:var(--vscode-input-background);color:va
 .msg{font-size:12px;line-height:1.45;padding:7px 9px;border-radius:6px;border:1px solid var(--vp-border)}
 .msg.err{border-color:color-mix(in srgb,var(--vscode-errorForeground) 60%,transparent);background:color-mix(in srgb,var(--vscode-errorForeground) 8%,transparent)}
 .msg.warn{border-color:color-mix(in srgb,var(--vscode-editorWarning-foreground) 60%,transparent);background:color-mix(in srgb,var(--vscode-editorWarning-foreground) 8%,transparent)}
+.msg.deps{display:flex;flex-direction:column;gap:6px}
+.msg.deps .dlist{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:2px}
+.msg.deps .dlist .d{margin-left:8px;opacity:.8}
+.msg.deps pre.cmd{margin:0;white-space:pre-wrap;word-break:break-word}
 .msg.chg{border-color:color-mix(in srgb,var(--vp-accent) 50%,transparent)}
 .cmd{font-family:var(--vp-mono);font-size:11.5px;background:var(--vp-bg);border:1px solid var(--vp-border);border-radius:6px;padding:8px;white-space:pre-wrap;word-break:break-all;margin:0;max-height:180px;overflow:auto}
 .actions{display:flex;flex-direction:column;gap:8px}
 .actions button{width:100%;justify-content:center}
-.actions .row button{width:auto;flex:1}
+.actions .row{flex-wrap:wrap}
+.actions .row button{width:auto;flex:1 1 auto}
 button.big{height:34px;font-size:13px}
 .last{font-size:12px;color:var(--vp-muted)}
 .stat-value.warn{color:var(--vscode-editorWarning-foreground)}

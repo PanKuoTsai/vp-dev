@@ -92,12 +92,12 @@ test('menu: every command is in a group, package.json matches, when clauses foll
   assert.deepStrictEqual(sim.items.filter((i) => i.separatorBefore).map((i) => i.command), ['vpStudio.connectAgent']);
   const ana = menu.visible({}, titles).find((g) => g.id === 'analysis');
   assert.deepStrictEqual(ana.items.map((i) => [i.command, i.separatorBefore]), [
-    ['vpStudio.showTrace', false], ['vpStudio.showProfile', true], ['vpStudio.ftrace.convert', true],
+    ['vpStudio.showTrace', false], ['vpStudio.trace.exportReplay', false], ['vpStudio.showProfile', true], ['vpStudio.ftrace.convert', true],
     ['vpStudio.perf.newSweep', true], ['vpStudio.perf.open', false], ['vpStudio.perf.createExample', false]]);
   // Running performance experiments needs QBox on this machine.
   const anaLocal = menu.visible({ 'vpStudio.localSim': true }, titles).find((g) => g.id === 'analysis');
   assert.ok(anaLocal.items.some((i) => i.command === 'vpStudio.perf.run') && anaLocal.items.some((i) => i.command === 'vpStudio.perf.sweep'));
-  assert.strictEqual(ana.items[1].icon, 'flame');
+  assert.strictEqual(ana.items[2].icon, 'flame');
 });
 
 test('menu: the standalone application puts the same menu in its menu bar', () => {

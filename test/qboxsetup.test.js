@@ -233,3 +233,108 @@ test('Build QBox view: the page script compiles, no style attributes, stable ids
   }
   assert.ok(html.includes("post({ type: 'ready' })") && html.includes("post({ type: 'build' })"));
 });
+
+test('Build QBox: host packages from check-deps.sh stop the build, with the apt command', () => {
+  const qs = require('../lib/setup/qboxsetup');
+  const os = require('os');
+  const cp = require('child_process');
+  const tsv = 'ok\tcmake\tcmake\t\nmissing\tlibzip\tlibzip-dev\t\nold\tcmake\tcmake\tversion 3.16; QBox\'s presets need 3.21 or newer\n'
+    + 'missing\tsdl2\tlibsdl2-dev\t--enable-sdl\nmissing\tlibzip\tlibzip-dev\t\ndistro\tubuntu\tdebian\n';
+  const d = qs.parseDeps(tsv);
+  assert.strictEqual(d.items.length, 5);
+  assert.deepStrictEqual(d.missing.map((i) => i.what), ['libzip', 'cmake', 'sdl2', 'libzip']);
+  assert.deepStrictEqual(d.packages, ['libzip-dev', 'cmake', 'libsdl2-dev']);
+  assert.strictEqual(d.install, 'sudo apt install libzip-dev cmake libsdl2-dev');
+  // Not Debian or Ubuntu: no apt command.
+  assert.strictEqual(qs.parseDeps('missing\tlibzip\tlibzip-dev\t\ndistro\tfedora\t\n').install, null);
+  assert.strictEqual(qs.parseDeps('ok\tgit\tgit\t\ndistro\tubuntu\tdebian\n').install, null);
+  // check(): an error (Build stays off) that names the packages and the command.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-deps-'));
+  try {
+    const form = { src: tmp, preset: 'gcc', targets: ['aarch64'], cache: { mode: 'none' }, patches: true, agent: false, useForSim: true };
+    const st = qs.inspect(tmp);
+    const c = qs.check(form, st, { deps: d });
+    const e = c.errors.find((x) => /^This host lacks/.test(x));
+    assert.ok(e && e.includes('libzip (libzip-dev)') && e.includes('sudo apt install libzip-dev cmake libsdl2-dev') && e.includes('presets need 3.21'), e);
+    assert.ok(!qs.check(form, st, { deps: qs.parseDeps('ok\tgit\tgit\t\n') }).errors.some((x) => /host lacks/.test(x)));
+    assert.ok(!qs.check(form, st, { deps: null }).errors.some((x) => /host lacks/.test(x)));
+    // Build Anyway passes --no-deps-check.
+    assert.ok(qs.argsFor(form, 'b.sh', { skipDeps: true }).includes('--no-deps-check'));
+    assert.ok(!qs.argsFor(form, 'b.sh').includes('--no-deps-check'));
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+  // The script: every line in the format above, exit code 1 when something is
+  // missing (no pkg-config modules found), and build-qbox.sh runs it.
+  const script = path.join(__dirname, '..', 'tools', 'qbox-pin', 'check-deps.sh');
+  const r = cp.spawnSync('bash', [script, '--tsv', '--preset', 'clang-lto'], { encoding: 'utf8', env: Object.assign({}, process.env, { PKG_CONFIG_LIBDIR: '/nonexistent', PKG_CONFIG_PATH: '' }) });
+  assert.strictEqual(r.status, 1, r.stderr);
+  const p = qs.parseDeps(r.stdout);
+  assert.ok(r.stdout.trim().split('\n').every((l) => /^(ok|missing|old|distro)\t/.test(l)), r.stdout);
+  for (const w of ['libelf', 'libzip', 'glib-2.0', 'pixman-1', 'slirp', 'sdl2', 'epoxy', 'libjpeg', 'virglrenderer']) assert.ok(p.missing.some((i) => i.what === w), w);
+  for (const w of ['cmake', 'git', 'make', 'clang', 'clang++', 'ld.lld', 'libfdt.h', 'asio.hpp', 'python3 venv']) assert.ok(p.items.some((i) => i.what === w), w);
+  assert.ok(!p.items.some((i) => i.what === 'gcc'));
+  const human = cp.spawnSync('bash', [script], { encoding: 'utf8', env: Object.assign({}, process.env, { PKG_CONFIG_LIBDIR: '/nonexistent', PKG_CONFIG_PATH: '' }) });
+  assert.strictEqual(human.status, 1);
+  assert.ok(/libzip  \(package libzip-dev\)/.test(human.stderr), human.stderr);
+  const sh = fs.readFileSync(path.join(__dirname, '..', 'tools', 'qbox-pin', 'build-qbox.sh'), 'utf8');
+  assert.ok(sh.includes('bash "$here/check-deps.sh" --preset "$preset" || exit 1') && sh.includes('--no-deps-check) depscheck=0'));
+  // Checked before cloning.
+  assert.ok(sh.indexOf('check-deps.sh" --preset "$preset"') < sh.indexOf('git -C "$dest" init'));
+  const html = require('../lib/webview/qboxview').render('n', 'c');
+  for (const id of ['deps-actions', 'deps-copy', 'deps-again', 'deps-skip']) assert.ok(html.includes(`id="${id}"`), id);
+  assert.ok(html.includes("post({ type: 'build', skipDeps: true })"));
+});
+
+test('tutorial: Create Tutorial Workspace checks the Ubuntu files, copies the tutorial and writes its platform', () => {
+  const tut = require('../lib/setup/tutorial');
+  const core = require('../lib/platform/core');
+  const os = require('os');
+  const qbox = fs.mkdtempSync(path.join(os.tmpdir(), 'vp-tut-'));
+  try {
+    const art = path.join(qbox, 'platforms', 'ubuntu', 'fw', 'Artifacts');
+    fs.mkdirSync(art, { recursive: true });
+    let st = tut.inspect(qbox);
+    assert.strictEqual(st.ok, false);
+    assert.deepStrictEqual(st.missing, ['fw/arm64_bootloader.lua', 'Image.bin', 'image_ext4.img', 'image_ext4_initrd.img', 'ubuntu.dtb']);
+    for (const f of ['Image.bin', 'image_ext4.img', 'image_ext4_initrd.img', 'ubuntu.dtb', 'vmlinux-5.15.0-203-generic']) fs.writeFileSync(path.join(art, f), 'x');
+    fs.writeFileSync(path.join(qbox, 'platforms', 'ubuntu', 'fw', 'arm64_bootloader.lua'), '');
+    st = tut.inspect(qbox);
+    assert.strictEqual(st.ok, true);
+    assert.strictEqual(st.vmlinux, path.join(art, 'vmlinux-5.15.0-203-generic'));
+    assert.deepStrictEqual(tut.existing(qbox), []);
+    const templateDir = path.join(__dirname, '..', 'templates', 'tutorial');
+    const ubuntu = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'ubuntu-aarch64.platform.json'), 'utf8'));
+    const made = tut.create(templateDir, ubuntu, qbox, { vmlinux: st.vmlinux });
+    assert.strictEqual(made.platformFile, path.join(qbox, 'platforms', 'ubuntu', 'vplogger-tutorial.platform.json'));
+    const doc = JSON.parse(fs.readFileSync(made.platformFile, 'utf8'));
+    assert.strictEqual(doc.name, 'vplogger-tutorial');
+    assert.strictEqual(doc.$schema, undefined);
+    assert.deepStrictEqual(doc.debug.symbols, ['${TOP}fw/Artifacts/vmlinux-5.15.0-203-generic']);
+    assert.deepStrictEqual(doc.modules, ubuntu.modules); // the Ubuntu platform itself, unchanged
+    for (const f of ['TUTORIAL.md', 'install-vplogger.sh', 'ci/vplogger-ci.sh', 'vplogger/vplogger.c', 'vplogger/build.sh',
+      'vplogger/bin/vplogger-bug', 'vplogger/bin/vplogger-fix1', 'vplogger/bin/vplogger-fix2',
+      'perf/logger-ddr.platform.json', 'perf/logger-ddr.perfsweep.json', 'perf/vplogger-fix1.replay.csv', 'perf/vplogger-fix2.replay.csv']) {
+      assert.ok(made.copied.includes(f.split('/').join(path.sep)), f);
+    }
+    for (const f of ['install-vplogger.sh', 'ci/vplogger-ci.sh', 'vplogger/bin/vplogger-fix2']) assert.ok(fs.statSync(path.join(made.folder, f)).mode & 0o100, f);
+    assert.strictEqual(JSON.parse(fs.readFileSync(path.join(made.folder, 'perf', 'logger-ddr.platform.json'), 'utf8')).$schema, undefined);
+    assert.deepStrictEqual(tut.existing(qbox).map((p) => path.basename(p)), ['vplogger-tutorial.platform.json', 'vplogger-tutorial']);
+    assert.deepStrictEqual(tut.sourceMap(made.folder), { '/vplogger': path.join(made.folder, 'vplogger') });
+    // No vmlinux: no debug.symbols.
+    assert.strictEqual(tut.platform(ubuntu, { dir: '/x' }).debug, ubuntu.debug);
+  } finally { fs.rmSync(qbox, { recursive: true, force: true }); }
+  // The shipped programs carry no path of the machine they were built on.
+  for (const f of ['vplogger-bug', 'vplogger-fix1', 'vplogger-fix2']) {
+    const b = fs.readFileSync(path.join(__dirname, '..', 'templates', 'tutorial', 'vplogger', 'bin', f)).toString('latin1');
+    assert.ok(!/\/home\/|\/Users\//.test(b), f);
+    assert.ok(b.includes('/vplogger'), f);
+  }
+  // The scripts are valid shell; the model's sweep and platform belong together.
+  const cp = require('child_process');
+  for (const f of ['install-vplogger.sh', 'ci/vplogger-ci.sh', 'vplogger/build.sh']) {
+    assert.strictEqual(cp.spawnSync('bash', ['-n', path.join(__dirname, '..', 'templates', 'tutorial', f)]).status, 0, f);
+  }
+  const sweep = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'tutorial', 'perf', 'logger-ddr.perfsweep.json'), 'utf8'));
+  assert.strictEqual(sweep.platform, 'logger-ddr.platform.json');
+  const perfDoc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'templates', 'tutorial', 'perf', 'logger-ddr.platform.json'), 'utf8'));
+  assert.deepStrictEqual(core.analyze(perfDoc).problems.filter((p) => p.level === 'error'), []);
+});

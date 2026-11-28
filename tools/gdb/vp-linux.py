@@ -26,7 +26,8 @@
 import gdb
 import gdb.printing
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
+SZ_2M = 0x200000
 MASK64 = (1 << 64) - 1
 
 
@@ -173,6 +174,33 @@ def _kaslr(apply):
                 _reload(obj, off)
             _checked[key] = off
             return {"offset": off, "applied": apply, "how": "from VBAR_EL1, checked with kimage_vaddr"}
+    # Without VBAR_EL1 (OpenOCD's gdb server has no such register): arm64 moves the
+    # kernel by a multiple of 2 MiB, so try the offsets that put the PC of a CPU in
+    # the kernel inside the first 128 MiB of the image.
+    text = _addr("_text")
+    pcs = []
+    for t in gdb.selected_inferior().threads():
+        if text is None or not _el(t):
+            continue
+        prev = gdb.selected_thread()
+        t.switch()
+        pc = _reg("pc")
+        prev.switch()
+        if pc is not None and pc >= 0xFFFF000000000000:
+            pcs.append(pc)
+    tried = set(candidates)
+    for pc in pcs[:2]:
+        top = (pc - text) & ~(SZ_2M - 1) & MASK64
+        for k in range(64):
+            off = (top - k * SZ_2M) & MASK64
+            if off in tried:
+                continue
+            tried.add(off)
+            if _offset_ok(off):
+                if apply:
+                    _reload(obj, off)
+                _checked[key] = off
+                return {"offset": off, "applied": apply, "how": "from a CPU's PC (2 MiB steps), checked with kimage_vaddr"}
     raise VpError("The symbols do not match the running kernel, and no KASLR offset fits. "
                   "Is it the vmlinux of the kernel that runs? Booting with \"nokaslr\" avoids the offset.")
 
